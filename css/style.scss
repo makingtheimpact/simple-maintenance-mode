@@ -1,0 +1,30 @@
+// Define variables (colors, fonts, etc.)
+$primary-color: #021f32;
+$font-stack: Helvetica, sans-serif;
+
+// Styles for the maintenance/coming soon pages
+.simple-maintenance-mode-content {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh; // 100% of the viewport height
+    width: 100vw; // 100% of the viewport width
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 9999; // Ensure it's above other elements
+    background-color: #f7f7f7; // Optional: white background with opacity
+  
+    // Inner content styling
+    .content {
+      text-align: center;
+      color: $primary-color;
+      h1 {
+        font-size: 3rem;
+      }
+      p {
+        font-size: 1.5rem;
+      }
+    }
+  }
+  
