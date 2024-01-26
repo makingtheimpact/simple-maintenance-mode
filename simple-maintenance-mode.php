@@ -5,7 +5,7 @@
  * Description:         A simple maintenance mode plugin with bypass link.
  * Version:             1.0.0
  * Requires at least:   6.4.2
- * Requires PHP:        8.0
+ * Requires PHP:        7.4
  * Author:              Making The Impact LLC
  * Author URI:          https://makingtheimpact.com
  * License:             GPL-2.0-or-later
