@@ -9,9 +9,9 @@ You can choose from 3 modes:
 2. Coming Soon - for new websites that are under construction
 3. Maintenance Mode - for existing websites undergoing changes
 
-###Features: 
-*Unique preview link - view the website while hidden from public
-*Page selector - choose the page you want users to be redirected to or display default content
+### Features: 
+* Unique preview link - view the website while hidden from public
+* Page selector - choose the page you want users to be redirected to or display default content
 
 ### How It Works: 
 **Online Mode:** When in online mode, the website is fully accessible. 
@@ -34,14 +34,14 @@ This plugin is only compatible with WordPress. To install it on your WordPress w
 3. Configure the plugin settings as needed.
 
 ## Frequently Asked Questions
-*It won't let me access the login page. What do I do?
+**It won't let me access the login page. What do I do?**
 In some cases, if you have a unique setup where the login is different from the default, it may create a situation where the login page is no longer accessible. 
 
 If this happens to you, you can use FTP or access the file manager of the hosting to rename the directory for this plugin and it should disable it. Failing that, you can try deleting it. 
 
 You can submit an issue on GitHub or contact me with details about the login page setup you have so that it can be fixed in the next update. 
 
-*I disabled the coming soon/maintenance mode, but the website is still redirecting (or vice versa). What do I do?
+**I disabled the coming soon/maintenance mode, but the website is still redirecting (or vice versa). What do I do?**
 Chances are this issue has to do with caching. If you have a caching plugin on your website, be sure to clear the cache each time you change the mode. 
 
 If the issue is isolated to one or a few users, the issue is likely that the browser has cached the files. Try clearing the browser's cache and accessing the website again. If the issue persists, try another web browser or device and see if the behavior continues. 
@@ -49,17 +49,14 @@ If the issue is isolated to one or a few users, the issue is likely that the bro
 If problems persist, you can report the issue on GitHub or contact me.
 
 ## Screenshots
-1. Description of the first screenshot.
-2. Description of the second screenshot.
+Coming soon...
 
 ## Changelog
-A list of changes made in each version of your plugin.
 
 ### 1.0.0
 - Initial release of the plugin.
 
 ## Upgrade Notice
-Notices about what to look out for when upgrading to a new version. 
 
 ### 1.0.0
 - First release of the plugin, no upgrade notices.
@@ -71,6 +68,4 @@ Any additional information like shortcodes, custom functions, or usage tips.
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
 
 ## License
-State the license of the plugin. For example:
-
 This plugin is open-sourced software licensed under the [GPLv2](https://www.gnu.org/licenses/gpl-2.0.html) license.
