@@ -42,11 +42,20 @@ function simple_maintenance_mode_check_bypass_token() {
     
     // Validate the token from the URL and set a secure cookie
     if (isset($_GET['mct_token']) && $_GET['mct_token'] === $token) {
+        $url = home_url(); // Retrieves the home URL of the site.
+        $parsed_url = parse_url($url); // Parse the URL to get its components.
+        $domain = $parsed_url['host']; // Get the host component which is your domain.
+
+        // Prepend a dot to make cookie valid across all subdomains
+        if (substr_count($domain, '.') == 1) {
+            $domain = '.' . $domain;
+        }
+
         // Secure cookie flags
         $cookie_options = array(
             'expires' => time() + 43200, // 12 hour validity
-            'path' => COOKIEPATH,
-            'domain' => COOKIE_DOMAIN,
+            'path' => '/',
+            'domain' => $domain,
             'secure' => $secure, // Only set to true if your site uses HTTPS
             'httponly' => true, // Cookie is accessible only through the HTTP protocol
             'samesite' => 'Lax' // Helps against CSRF
