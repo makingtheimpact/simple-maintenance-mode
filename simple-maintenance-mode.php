@@ -77,6 +77,11 @@ function simple_maintenance_mode_check_bypass_token() {
 
 // Intercept requests and show the maintenance/coming soon page
 function simple_maintenance_mode_show_maintenance_page() {
+    // Exclude AJAX, admin, cron jobs, and customizer from the maintenance logic
+    if (wp_doing_ajax() || is_admin() || wp_doing_cron() || is_customize_preview()) {
+        return;
+    }
+    
     global $post;
     $requested_page = esc_url($_SERVER['REQUEST_URI']);
     
@@ -329,6 +334,7 @@ add_action('admin_head', 'simple_maintenance_mode_admin_styles');
 add_action('template_redirect', 'simple_maintenance_mode_show_maintenance_page', 9); // priority 9 to override the default template redirect
 
 function simple_maintenance_mode_enqueue_admin_styles($hook) {
+    global $simple_maintenance_mode_version;
     if ('settings_page_maintenance-mode-settings' !== $hook) {
         return;
     }
@@ -342,6 +348,7 @@ function simple_maintenance_mode_enqueue_admin_styles($hook) {
 add_action('admin_enqueue_scripts', 'simple_maintenance_mode_enqueue_admin_styles');
 
 function simple_maintenance_mode_enqueue_styles() {
+    global $simple_maintenance_mode_version;
     // This assumes you are correctly determining when to load these styles.
     wp_enqueue_style(
         'simple_maintenance_mode_style', 
@@ -355,6 +362,7 @@ add_action('wp_enqueue_scripts', 'simple_maintenance_mode_enqueue_styles');
 
 // Enqueue the script for the admin settings page
 function simple_maintenance_mode_enqueue_scripts($hook) {
+    global $simple_maintenance_mode_version;
     // Only add to the settings page of the plugin
     if ($hook !== 'settings_page_maintenance-mode-settings') {
         return;
