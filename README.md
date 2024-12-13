@@ -12,6 +12,11 @@ You can choose from 3 modes:
 ### Features: 
 * Unique preview link - view the website while hidden from public
 * Page selector - choose the page you want users to be redirected to or display default content
+* Copyable bypass URL - copy the URL to the clipboard so you can easily share it with others
+* 12 hour cookie expiration - the bypass URL will create a cookie on the device that expires after 12 hours. So long as the unique key remains unchanged, the link can be used repeatedly, each time setting a cookie with the 12 hour expiration. 
+* Countdown timer - display a countdown timer to the date you want the website to be live
+* Background images and customizable coming soon/maintenance mode page
+* Preview coming soon/maintenance mode page
 
 ### How It Works: 
 **Online Mode:** When in online mode, the website is fully accessible. 
@@ -53,16 +58,28 @@ Coming soon...
 
 ## Changelog
 
+### 1.0.2
+- Added copyable bypass URL
+- Added 12 hour cookie expiration
+- Added countdown timer
+- Added background images and customizable coming soon/maintenance mode page
+
+### 1.0.1
+- Bug fixes and improvements
+
 ### 1.0.0
 - Initial release of the plugin.
 
 ## Upgrade Notice
 
+### 1.0.2
+- Improved version of the plugin with more features and bug fixes.
+
+### 1.0.1
+- Bug fixes and improvements.
+
 ### 1.0.0
 - First release of the plugin, no upgrade notices.
-
-## Additional Information
-Any additional information like shortcodes, custom functions, or usage tips.
 
 ## Contributing
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.

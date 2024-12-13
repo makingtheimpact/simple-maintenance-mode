@@ -3,7 +3,7 @@
  * Plugin Name:         Simple Maintenance Mode
  * Plugin URI:          https://makingtheimpact.com/wordpress-plugins
  * Description:         A simple maintenance mode plugin with bypass link.
- * Version:             1.0.1   
+ * Version:             1.0.2
  * Requires at least:   6.4.2
  * Requires PHP:        7.4
  * Author:              Making The Impact LLC
@@ -15,7 +15,7 @@
  */
 
 
-$simple_maintenance_mode_version = "1.0.1";
+$simple_maintenance_mode_version = "1.0.2";
 
 /* TOKEN TO BYPASS COMING SOON/MAINTENANCE MODE */
 // Generate a random token
