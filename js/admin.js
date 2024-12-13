@@ -73,6 +73,26 @@ jQuery(document).ready(function($) {
         mediaUploader[type].open();
     }
 
+    // Background video upload
+    $('#upload_background_video').on('click', function(e) {
+        e.preventDefault();
+        handleMediaUpload('video', function(attachment) {
+            $('#smm_background_video').val(attachment.url);
+            $('#remove_background_video').show();
+            $('#video_preview').attr('src', attachment.url).show();
+            $('#video_preview_message').show();
+            $('#video_name').text(attachment.filename);
+        });
+    });
+
+    // Remove background video
+    $('#remove_background_video').on('click', function() {
+        $('#smm_background_video').val('');
+        $('#video_preview_message').hide();
+        $('#video_preview').hide();
+        $(this).hide();
+    });
+
     // Background image upload
     $('#upload_background_image').on('click', function(e) {
         e.preventDefault();
@@ -80,15 +100,6 @@ jQuery(document).ready(function($) {
             $('#smm_background_image').val(attachment.url);
             $('#background_image_preview').attr('src', attachment.url).show();
             $('#remove_background_image').show();
-        });
-    });
-
-    // Background video upload
-    $('#upload_background_video').on('click', function(e) {
-        e.preventDefault();
-        handleMediaUpload('video', function(attachment) {
-            $('#smm_background_video').val(attachment.url);
-            $('#remove_background_video').show();
         });
     });
 
@@ -106,12 +117,6 @@ jQuery(document).ready(function($) {
     $('#remove_background_image').on('click', function() {
         $('#smm_background_image').val('');
         $('#background_image_preview').attr('src', '').hide();
-        $(this).hide();
-    });
-
-    // Remove background video
-    $('#remove_background_video').on('click', function() {
-        $('#smm_background_video').val('');
         $(this).hide();
     });
 

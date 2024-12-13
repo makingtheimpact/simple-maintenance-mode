@@ -332,6 +332,10 @@ function simple_maintenance_mode_settings_page() {
             update_option('smm_custom_content', wp_kses_post($custom_content));
         }
 
+        if (isset($_POST['smm_background_video'])) {
+            update_option('smm_background_video', esc_url_raw($_POST['smm_background_video']));
+        }
+
         set_transient('simple_maintenance_mode_settings_saved', true, 10);
     }
 
@@ -463,9 +467,11 @@ function simple_maintenance_mode_settings_page() {
                 <tr class="background-video-section" <?php echo $background_type === 'image' ? 'style="display:none;"' : ''; ?>>
                     <th scope="row"><label>Background Video</label></th>
                     <td>
+                        <p id="video_preview_message" style="display: <?php echo empty($background_video) ? 'none' : 'block'; ?>">Video selected: <span id="video_name"><?php echo basename($background_video); ?></span></p>
+                        <video id="video_preview" src="<?php echo esc_url($background_video); ?>" style="max-width: 200px; display: <?php echo empty($background_video) ? 'none' : 'block'; ?>" controls></video>
                         <input type="hidden" name="smm_background_video" id="smm_background_video" value="<?php echo esc_attr($background_video); ?>">
-                        <button type="button" class="button" id="upload_background_video">Choose Video</button>
-                        <button type="button" class="button" id="remove_background_video" style="display: <?php echo empty($background_video) ? 'none' : 'inline-block'; ?>">Remove Video</button>
+                        <p><button type="button" class="button" id="upload_background_video">Choose Video</button>
+                        <button type="button" class="button" id="remove_background_video" style="display: <?php echo empty($background_video) ? 'none' : 'inline-block'; ?>">Remove Video</button></p>
                         <p class="description">Upload MP4 video file (recommended max size: 10MB)</p>
                     </td>
                 </tr>
@@ -663,6 +669,7 @@ function simple_maintenance_mode_settings_page() {
             var previewUrl = '<?php echo esc_url(home_url('?preview_maintenance_mode=1')); ?>';
             window.open(previewUrl, '_blank');
         });
+
     });
     function copyToClipboard(text) {
         if (navigator.clipboard) {
