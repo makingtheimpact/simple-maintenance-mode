@@ -1,129 +1,45 @@
-jQuery(document).ready(function($) {
-    const { __ } = wp.i18n;
+jQuery(function($){
+    $('.smm-color').wpColorPicker();
 
-    // Initialize color pickers with different settings
-    const colorPickerOptions = {
-        defaultColor: false,
-        change: function(event, ui) {
-            // Modern event handling
-            $(event.target).trigger('color-change', ui.color.toString());
-        },
-        clear: function() {},
-        hide: true,
-        palettes: true,
-        strings: {
-            pick: smmAdmin.colorPicker.pick,
-            current: smmAdmin.colorPicker.current
-        }
-    };
-
-    // Initialize color pickers
-    $('#smm_background_color, #smm_text_color, #smm_overlay_color').each(function() {
-        $(this).wpColorPicker(colorPickerOptions);
-    });
-    
-    // Handle opacity slider
-    $('#smm_overlay_opacity').on('input change', function() {
-        $('#opacity_value').text($(this).val() + '%');
-    });
-
-    // Background type toggle
-    $('#smm_background_type').on('change', function() {
-        if ($(this).val() === 'video') {
-            $('.background-image-section').hide();
-            $('.background-video-section').show();
-        } else {
-            $('.background-image-section').show();
-            $('.background-video-section').hide();
-        }
-    });
-
-    // Countdown toggle
-    $('#smm_show_countdown').on('change', function() {
-        if ($(this).is(':checked')) {
-            $('.countdown-date-section').show();
-        } else {
-            $('.countdown-date-section').hide();
-        }
-    });
-
-    // Media uploader instances
-    const mediaUploader = {};
-
-    // Generic function to handle media uploads
-    function handleMediaUpload(type, callback) {
-        if (mediaUploader[type]) {
-            mediaUploader[type].open();
-            return;
-        }
-
-        mediaUploader[type] = wp.media({
-            title: smmAdmin.frame_title[type],
-            multiple: false,
-            library: {
-                type: type === 'video' ? 'video' : 'image'
-            }
-        });
-
-        mediaUploader[type].on('select', function() {
-            const attachment = mediaUploader[type].state().get('selection').first().toJSON();
-            callback(attachment);
-        });
-
-        mediaUploader[type].open();
+    function syncVisibility(){
+        const type=$('#background_type').val();
+        $('.smm-background-group').hide();
+        $('.smm-bg-'+type).show();
+        $('.smm-countdown-field').toggle($('input[name="show_countdown"]').is(':checked'));
+        $('.smm-button-fields').toggle($('input[name="show_button"]').is(':checked'));
+        const response=$('#response_code').val();
+        $('.smm-retry-field').toggle(response==='503'||response==='auto');
     }
+    syncVisibility();
+    $('#background_type,#response_code,input[name="show_countdown"],input[name="show_button"]').on('change',syncVisibility);
 
-    // Background video upload
-    $('#upload_background_video').on('click', function(e) {
+    $('input[type="range"]').on('input change',function(){
+        const suffix=this.name==='logo_width'?'px':'%';
+        $(this).siblings('.smm-range-value').text(this.value+suffix);
+    });
+
+    const frames={};
+    $('.smm-media-button').on('click',function(e){
         e.preventDefault();
-        handleMediaUpload('video', function(attachment) {
-            $('#smm_background_video').val(attachment.url);
-            $('#remove_background_video').show();
-            $('#video_preview').attr('src', attachment.url).show();
-            $('#video_preview_message').show();
-            $('#video_name').text(attachment.filename);
+        const target=$(this).data('target');
+        const type=$(this).data('type');
+        if(frames[target]){frames[target].open();return;}
+        const isVideo=type==='video';
+        frames[target]=wp.media({
+            title:isVideo?smmAdmin.videoTitle:(type==='logo'?smmAdmin.logoTitle:smmAdmin.backgroundTitle),
+            library:{type:isVideo?'video':'image'},
+            multiple:false
         });
-    });
-
-    // Remove background video
-    $('#remove_background_video').on('click', function() {
-        $('#smm_background_video').val('');
-        $('#video_preview_message').hide();
-        $('#video_preview').hide();
-        $(this).hide();
-    });
-
-    // Background image upload
-    $('#upload_background_image').on('click', function(e) {
-        e.preventDefault();
-        handleMediaUpload('background', function(attachment) {
-            $('#smm_background_image').val(attachment.url);
-            $('#background_image_preview').attr('src', attachment.url).show();
-            $('#remove_background_image').show();
+        frames[target].on('select',function(){
+            const item=frames[target].state().get('selection').first().toJSON();
+            $('#'+target).val(item.url).trigger('change');
         });
+        frames[target].open();
     });
+    $('.smm-clear-media').on('click',function(){ $('#'+$(this).data('target')).val(''); });
 
-    // Logo image upload
-    $('#upload_logo_image').on('click', function(e) {
-        e.preventDefault();
-        handleMediaUpload('logo', function(attachment) {
-            $('#smm_logo_image').val(attachment.url);
-            $('#logo_image_preview').attr('src', attachment.url).show();
-            $('#remove_logo_image').show();
-        });
+    $('#smm-copy-bypass').on('click',async function(){
+        const text=$('#smm-bypass-url').text();
+        try{await navigator.clipboard.writeText(text);$(this).text('Copied!');setTimeout(()=>$(this).text('Copy'),1400);}catch(e){window.prompt('Copy this URL:',text);}
     });
-
-    // Remove background image
-    $('#remove_background_image').on('click', function() {
-        $('#smm_background_image').val('');
-        $('#background_image_preview').attr('src', '').hide();
-        $(this).hide();
-    });
-
-    // Remove logo image
-    $('#remove_logo_image').on('click', function() {
-        $('#smm_logo_image').val('');
-        $('#logo_image_preview').attr('src', '').hide();
-        $(this).hide();
-    });
-}); 
+});
