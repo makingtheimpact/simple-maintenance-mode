@@ -1,7 +1,7 @@
 === Simple Maintenance Mode ===
 Contributors: makingtheimpact
 Donate link: https://makingtheimpact.com
-Tags: maintenance, coming soon, maintenance mode, under construction, lightweight
+Tags: maintenance, coming soon, maintenance mode, lightweight, website maintenance
 Requires at least: 6.4
 Tested up to: 7.1
 Stable tag: 2.0.0
@@ -9,74 +9,105 @@ Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-A lightweight, customizable maintenance and coming-soon plugin with secure bypass access and no bundled background-image bloat.
+A lightweight maintenance and coming-soon plugin with secure bypass links, customizable layouts, URL exemptions, and no bundled stock-image bloat.
 
 == Description ==
-Simple Maintenance Mode lets administrators hide a WordPress site from public visitors while keeping administration and login access available.
 
-Choose from Online, Coming Soon, or Maintenance modes. Use the lightweight built-in template or select a published WordPress page.
+Simple Maintenance Mode lets you temporarily hide the normal WordPress site from visitors while administrators continue working normally.
+
+Choose from three modes:
+
+1. Online
+2. Coming Soon
+3. Maintenance
+
+Version 2.0 focuses on security, usability, compatibility, and a dramatically smaller distribution size.
 
 == Features ==
-* Online, Coming Soon, and Maintenance modes
-* Automatic HTTP status behavior: 503 for Maintenance and 200 for Coming Soon
-* Manual 200/503 override and configurable Retry-After value
-* Secure bypass URLs with configurable cookie duration and token regeneration
-* Six built-in layouts
-* Lightweight CSS gradient presets instead of bundled stock background images
-* Solid color, gradient, uploaded image, or uploaded video backgrounds
-* Logo upload and logo sizing
-* Heading, message, typography, alignment, color, width, spacing, radius, panel, and shadow controls
-* Optional countdown and call-to-action button
-* Custom safe HTML content for advanced users
-* Preview link for administrators
-* Optional public REST API blocking and XML-RPC disabling while maintenance mode is active
-* Prominent admin notice and toolbar indicator while the site is restricted
-* Direct Settings link on the Plugins screen
+
+* Automatic 200/503 response codes with manual override
+* Configurable Retry-After header for maintenance responses
+* Secure temporary bypass URL with configurable duration
+* Custom login URL exemption for hidden or renamed WordPress login pages
+* Additional same-site URL exemptions with exact or explicit trailing-* prefix matching
+* Optional REST API blocking while maintenance mode is active
+* Optional XML-RPC disabling while maintenance mode is active
+* Six layout options
+* Solid, CSS gradient, uploaded image, and uploaded video backgrounds
+* Eleven lightweight CSS gradient presets
+* Logo size controls
+* Heading and body typography controls
+* Content width, padding, panel opacity, radius, and shadow controls
+* Optional countdown timer
+* Optional call-to-action button
+* Advanced safe HTML content
+* Administrator-only preview
+* Prominent admin menu, notice, and toolbar status indicator
+* Responsive output and reduced-motion handling
+
+== URL Exemptions ==
+
+The normal /wp-login.php endpoint remains available automatically.
+
+If a security plugin changes the WordPress login URL, enter the replacement route in the Custom Login URL field.
+
+Additional URLs can be entered one per line. Exact matching is used by default. Add an asterisk only at the end when you intentionally want to exempt a path and everything below it.
+
+Examples:
+
+/status/
+/payment-callback/
+/webhooks/*
+
+Query strings are ignored. External-domain URLs are rejected. Exempted routes remain publicly available while maintenance mode is active, so only exempt routes that genuinely need public access.
 
 == Installation ==
-1. Upload `simple-maintenance-mode` to `/wp-content/plugins/` or install the plugin ZIP.
-2. Activate the plugin through the Plugins screen in WordPress.
-3. Open the new Maintenance menu in the WordPress admin.
-4. Configure the page, design, access, and HTTP response settings.
-5. Change Site Status to Coming Soon or Maintenance and save.
+
+1. Upload `simple-maintenance-mode` to `/wp-content/plugins/`.
+2. Activate the plugin through the Plugins menu in WordPress.
+3. Open Maintenance in the WordPress admin menu.
+4. Configure the plugin and choose Online, Coming Soon, or Maintenance.
 
 == Frequently Asked Questions ==
-= Which HTTP response should I use? =
-The Automatic setting is recommended. It returns 503 Service Unavailable for Maintenance mode so search engines understand an existing site is temporarily unavailable. Coming Soon mode returns 200 OK, which is generally better for a new site that has not previously been indexed with normal content.
 
-= Can clients or collaborators view the real website while maintenance mode is enabled? =
-Yes. Enable bypass links and share the generated bypass URL. A successful bypass stores a secure HTTP-only cookie for the configured number of hours and then removes the token from the visible browser URL.
+= What response code should I use? =
 
-= Can I use my own page? =
-Yes. Choose any published WordPress page as the maintenance page, or use the built-in lightweight template.
+Automatic mode uses HTTP 503 for Maintenance and HTTP 200 for Coming Soon. A 503 response tells search engines the interruption is temporary. HTTP 200 is generally more appropriate for a brand-new Coming Soon site.
 
-= Can I use my own image or video? =
-Yes. The plugin does not bundle stock backgrounds. You can use a CSS gradient, a solid color, or choose your own image or video from the WordPress Media Library.
+= Can I still log in while maintenance mode is active? =
 
-= Where are the settings? =
-The plugin adds a top-level Maintenance menu and a Settings link on the Plugins screen. When maintenance or coming-soon mode is enabled, WordPress also shows a prominent status notice and toolbar indicator.
+Yes. The standard WordPress login endpoint remains accessible automatically. If another plugin changes or hides the login URL, enter the replacement path under Access & URL Exemptions.
+
+= Can I keep a specific page or callback URL public? =
+
+Yes. Add the path under Additional Exempt URLs. Entries match exactly unless you intentionally add a trailing asterisk for prefix matching.
+
+= Can I let a client preview the normal site? =
+
+Yes. Enable secure bypass links and share the generated URL. It creates an HTTP-only SameSite cookie for the configured duration. Regenerating the token invalidates previous bypass links and cookies.
+
+= Can I use my own custom page? =
+
+Yes. Select a published WordPress page as the maintenance page source, or use the plugin template and its built-in customization controls.
 
 == Changelog ==
+
 = 2.0.0 =
-* Rebuilt maintenance request handling and removed unsafe substring-based login bypass checks.
-* Added constant-time bypass token validation, configurable duration, and token cleanup from the browser URL.
-* Added automatic/manual 200 and 503 HTTP response controls and Retry-After configuration.
-* Added optional REST API and XML-RPC blocking while maintenance mode is active.
-* Replaced bundled stock backgrounds with lightweight CSS gradient presets.
-* Added six page layouts and expanded logo, typography, content, panel, spacing, and button controls.
-* Added a streamlined top-level admin screen, Plugins-page Settings link, admin notice, and toolbar status indicator.
-* Removed the obsolete custom updater. A replacement update mechanism will be added separately.
-* Updated compatibility metadata for WordPress 7.1.
+* Major security and request-handling refactor
+* Added configurable HTTP response codes and Retry-After
+* Added secure configurable bypass links
+* Added custom login and additional URL exemptions
+* Added REST API and XML-RPC controls
+* Added six layouts and expanded visual customization
+* Replaced bundled background images with CSS gradients
+* Removed obsolete updater and unused legacy assets
+* Improved admin discoverability and status indicators
 
 = 1.0.2 =
-* Added bypass URL, countdown, backgrounds, and additional customization.
+* New features and improvements
 
 = 1.0.1 =
-* Bug fixes and improvements.
+* Bug fixes and improvements
 
 = 1.0.0 =
-* Initial release.
-
-== Upgrade Notice ==
-= 2.0.0 =
-Major security, compatibility, size, and customization update. Review your maintenance-page design after upgrading because bundled stock backgrounds have been removed.
+* Initial release
