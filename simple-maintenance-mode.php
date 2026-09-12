@@ -31,6 +31,8 @@ function smm_defaults() {
         'retry_after'            => 3600,
         'bypass_enabled'         => 1,
         'bypass_duration'        => 12,
+        'custom_login_url'       => '',
+        'exempt_urls'            => '',
         'layout'                 => 'centered-card',
         'background_type'        => 'gradient',
         'gradient_preset'        => 'ocean',
@@ -77,7 +79,7 @@ function smm_defaults() {
 function smm_get( $key ) {
     $defaults = smm_defaults();
     $option_map = array(
-        'status' => 'simple_maintenance_mode_status',
+        'status'  => 'simple_maintenance_mode_status',
         'page_id' => 'simple_maintenance_mode_page',
     );
     $option = isset( $option_map[ $key ] ) ? $option_map[ $key ] : 'smm_' . $key;
@@ -115,7 +117,7 @@ function smm_has_valid_bypass_cookie() {
     if ( ! smm_get( 'bypass_enabled' ) || empty( $_COOKIE['smm_bypass'] ) ) {
         return false;
     }
-    $token = smm_get_bypass_token();
+    $token  = smm_get_bypass_token();
     $cookie = sanitize_text_field( wp_unslash( $_COOKIE['smm_bypass'] ) );
     return ! empty( $token ) && hash_equals( $token, $cookie );
 }
@@ -126,7 +128,7 @@ function smm_handle_bypass_request() {
     }
 
     $provided = sanitize_text_field( wp_unslash( $_GET['smm_token'] ) );
-    $token = smm_get_bypass_token();
+    $token    = smm_get_bypass_token();
     if ( empty( $token ) || ! hash_equals( $token, $provided ) ) {
         return false;
     }
@@ -150,6 +152,100 @@ function smm_handle_bypass_request() {
     exit;
 }
 
+function smm_normalize_exempt_path( $value ) {
+    $value = trim( (string) $value );
+    if ( '' === $value ) {
+        return '';
+    }
+
+    $wildcard = '*' === substr( $value, -1 );
+    if ( $wildcard ) {
+        $value = rtrim( substr( $value, 0, -1 ) );
+    }
+
+    if ( preg_match( '#^https?://#i', $value ) ) {
+        $parts     = wp_parse_url( $value );
+        $home_host = wp_parse_url( home_url( '/' ), PHP_URL_HOST );
+        if ( empty( $parts['host'] ) || empty( $home_host ) || 0 !== strcasecmp( $parts['host'], $home_host ) ) {
+            return '';
+        }
+        $value = isset( $parts['path'] ) ? $parts['path'] : '/';
+    } else {
+        $value = strtok( $value, '?#' );
+    }
+
+    $value = '/' . ltrim( (string) $value, '/' );
+    $value = preg_replace( '#/+#', '/', $value );
+    if ( '/' !== $value ) {
+        $value = untrailingslashit( $value );
+    }
+
+    return $value . ( $wildcard ? '*' : '' );
+}
+
+function smm_sanitize_exempt_urls( $value ) {
+    $lines = preg_split( '/\r\n|\r|\n/', wp_unslash( (string) $value ) );
+    $clean = array();
+    foreach ( $lines as $line ) {
+        $path = smm_normalize_exempt_path( sanitize_text_field( $line ) );
+        if ( '' !== $path && '/' !== $path ) {
+            $clean[] = $path;
+        }
+    }
+    return implode( "\n", array_values( array_unique( $clean ) ) );
+}
+
+function smm_current_request_path() {
+    $request_uri = isset( $_SERVER['REQUEST_URI'] ) ? wp_unslash( $_SERVER['REQUEST_URI'] ) : '/';
+    $path = wp_parse_url( $request_uri, PHP_URL_PATH );
+    if ( ! is_string( $path ) || '' === $path ) {
+        return '/';
+    }
+    $path = '/' . ltrim( $path, '/' );
+    $path = preg_replace( '#/+#', '/', $path );
+    return '/' === $path ? '/' : untrailingslashit( $path );
+}
+
+function smm_path_matches_exemption( $request_path, $rule ) {
+    $rule = smm_normalize_exempt_path( $rule );
+    if ( '' === $rule || '/' === $rule ) {
+        return false;
+    }
+
+    if ( '*' === substr( $rule, -1 ) ) {
+        $prefix = untrailingslashit( substr( $rule, 0, -1 ) );
+        return $prefix && ( $request_path === $prefix || 0 === strpos( $request_path . '/', $prefix . '/' ) );
+    }
+
+    return $request_path === $rule;
+}
+
+function smm_current_path_is_exempt() {
+    $request_path = smm_current_request_path();
+    $rules = array();
+
+    $custom_login = smm_normalize_exempt_path( smm_get( 'custom_login_url' ) );
+    if ( $custom_login ) {
+        $rules[] = $custom_login;
+    }
+
+    $additional = preg_split( '/\r\n|\r|\n/', (string) smm_get( 'exempt_urls' ) );
+    foreach ( $additional as $rule ) {
+        $rule = trim( $rule );
+        if ( '' !== $rule ) {
+            $rules[] = $rule;
+        }
+    }
+
+    foreach ( $rules as $rule ) {
+        if ( smm_path_matches_exemption( $request_path, $rule ) ) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 function smm_request_is_allowed() {
     if ( ! smm_is_active() ) {
         return true;
@@ -166,6 +262,10 @@ function smm_request_is_allowed() {
 
     global $pagenow;
     if ( 'wp-login.php' === $pagenow ) {
+        return true;
+    }
+
+    if ( smm_current_path_is_exempt() ) {
         return true;
     }
 
@@ -261,7 +361,7 @@ function smm_block_rest_api( $result ) {
 add_filter( 'rest_authentication_errors', 'smm_block_rest_api', 99 );
 
 function smm_filter_xmlrpc_enabled( $enabled ) {
-    if ( smm_is_active() && smm_get( 'block_xmlrpc' ) && ! current_user_can( 'manage_options' ) ) {
+    if ( smm_is_active() && smm_get( 'block_xmlrpc' ) && ! current_user_can( 'manage_options' ) && ! smm_current_path_is_exempt() ) {
         return false;
     }
     return $enabled;
@@ -288,6 +388,8 @@ function smm_save_settings() {
     update_option( 'smm_retry_after', smm_clamp( $_POST['retry_after'] ?? 3600, 60, 604800 ) );
     update_option( 'smm_bypass_enabled', isset( $_POST['bypass_enabled'] ) ? 1 : 0 );
     update_option( 'smm_bypass_duration', smm_clamp( $_POST['bypass_duration'] ?? 12, 1, 168 ) );
+    update_option( 'smm_custom_login_url', smm_normalize_exempt_path( sanitize_text_field( wp_unslash( $_POST['custom_login_url'] ?? '' ) ) ) );
+    update_option( 'smm_exempt_urls', smm_sanitize_exempt_urls( $_POST['exempt_urls'] ?? '' ) );
 
     if ( isset( $_POST['regenerate_token'] ) ) {
         smm_regenerate_bypass_token();
@@ -375,12 +477,14 @@ function smm_admin_bar( $bar ) {
         return;
     }
     $title = 'maintenance' === smm_get( 'status' ) ? '● ' . __( 'Maintenance ON', 'simple-maintenance-mode' ) : '● ' . __( 'Coming Soon ON', 'simple-maintenance-mode' );
-    $bar->add_node( array(
-        'id' => 'smm-status',
-        'title' => $title,
-        'href' => admin_url( 'admin.php?page=simple-maintenance-mode' ),
-        'meta' => array( 'class' => 'smm-admin-bar-status' ),
-    ) );
+    $bar->add_node(
+        array(
+            'id'    => 'smm-status',
+            'title' => $title,
+            'href'  => admin_url( 'admin.php?page=simple-maintenance-mode' ),
+            'meta'  => array( 'class' => 'smm-admin-bar-status' ),
+        )
+    );
 }
 add_action( 'admin_bar_menu', 'smm_admin_bar', 90 );
 
@@ -392,11 +496,15 @@ function smm_admin_assets( $hook ) {
     wp_enqueue_style( 'wp-color-picker' );
     wp_enqueue_style( 'smm-admin', SMM_URL . 'css/admin-style.css', array(), SMM_VERSION );
     wp_enqueue_script( 'smm-admin', SMM_URL . 'js/admin.js', array( 'jquery', 'wp-color-picker' ), SMM_VERSION, true );
-    wp_localize_script( 'smm-admin', 'smmAdmin', array(
-        'logoTitle' => __( 'Choose Logo', 'simple-maintenance-mode' ),
-        'backgroundTitle' => __( 'Choose Background Image', 'simple-maintenance-mode' ),
-        'videoTitle' => __( 'Choose Background Video', 'simple-maintenance-mode' ),
-    ) );
+    wp_localize_script(
+        'smm-admin',
+        'smmAdmin',
+        array(
+            'logoTitle'       => __( 'Choose Logo', 'simple-maintenance-mode' ),
+            'backgroundTitle' => __( 'Choose Background Image', 'simple-maintenance-mode' ),
+            'videoTitle'      => __( 'Choose Background Video', 'simple-maintenance-mode' ),
+        )
+    );
 }
 add_action( 'admin_enqueue_scripts', 'smm_admin_assets' );
 
