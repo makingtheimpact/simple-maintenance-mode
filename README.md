@@ -1,88 +1,79 @@
 # Simple Maintenance Mode
 
-A lightweight WordPress maintenance and coming-soon plugin with secure bypass access, flexible layouts, and no bundled stock-background bloat.
+A lightweight WordPress maintenance and coming-soon plugin with secure bypass links, configurable HTTP responses, customizable layouts, and no bundled stock-image bloat.
 
 ## Modes
 
-- **Online** — normal public access.
-- **Coming Soon** — hides the normal site while presenting a launch page. Automatic HTTP mode returns `200 OK`.
-- **Maintenance** — hides the normal site during temporary work. Automatic HTTP mode returns `503 Service Unavailable` with a configurable `Retry-After` header.
+1. **Online** — the normal website is publicly accessible.
+2. **Coming Soon** — visitors see a coming-soon page while administrators retain normal access.
+3. **Maintenance** — visitors see a temporary maintenance page while administrators retain normal access.
 
-## Version 2.0 features
+## Highlights
 
-- Six built-in layouts: Centered, Centered Card, Split Left, Split Right, Bottom Panel, and Minimal.
-- Solid-color, CSS-gradient, custom image, and custom video backgrounds.
-- Eleven lightweight CSS gradient presets instead of bundled background images.
-- Logo upload and width controls.
-- Heading/body size, font, weight, alignment, color, width, spacing, radius, panel, and shadow controls.
-- Optional countdown and call-to-action button.
-- Safe advanced HTML content area.
-- Secure bypass URLs with configurable duration and token regeneration.
-- Bypass tokens are removed from the visible browser URL after successful authorization.
-- Optional public REST API blocking and XML-RPC disabling while maintenance mode is active.
-- Automatic or manual `200` / `503` response control.
-- Top-level **Maintenance** admin menu, direct Plugins-screen Settings link, toolbar status, and admin warning while restricted mode is active.
-- Administrator-only preview.
-- Compatible metadata updated for WordPress 7.1 and PHP 7.4+.
+- Automatic SEO-friendly response codes: 200 for Coming Soon and 503 for Maintenance, with manual override.
+- Configurable `Retry-After` header for 503 responses.
+- Secure temporary bypass URLs with configurable cookie duration and token regeneration.
+- Custom login URL exemption for sites that hide or rename `/wp-login.php`.
+- Additional URL exemptions with exact matching or explicit trailing-`*` prefix matching.
+- Same-site-only exemption validation; external domains are rejected.
+- Optional public REST API blocking and XML-RPC disabling while restricted mode is active.
+- Six lightweight layouts: Centered, Centered Card, Split Left, Split Right, Bottom Panel, and Minimal.
+- Solid, CSS gradient, uploaded image, and uploaded video backgrounds.
+- Eleven built-in CSS gradient presets without bundled background images.
+- Logo sizing, typography, alignment, colors, spacing, content-panel styling, CTA button, and countdown controls.
+- Administrator preview, top-level Maintenance menu, Plugins-page Settings link, admin notice, and toolbar status indicator.
+- Safe advanced HTML content using WordPress sanitization.
+- Responsive output and reduced-motion handling.
 
-## Security changes in 2.0
+## URL exemptions
 
-The request gate was rebuilt rather than extending the old substring-based URL checks. The plugin now uses exact WordPress login/admin handling, capability checks, constant-time token comparison with `hash_equals()`, HTTP-only bypass cookies, input allowlists, clamped numeric settings, WordPress nonces, safe HTML filtering, and WordPress HTTP status/cache APIs.
+The standard WordPress login endpoint remains accessible automatically. If a security plugin changes the login URL, enter that route in **Maintenance → Access & URL Exemptions → Custom Login URL**.
+
+Additional routes can be entered one per line. Entries match exactly by default:
+
+```text
+/status/
+/payment-callback/
+```
+
+Add a trailing `*` only when you intentionally want to allow a route and everything below it:
+
+```text
+/webhooks/*
+```
+
+Query strings are ignored for matching, and external-domain URLs are rejected. Because exempt routes remain publicly accessible to everyone while maintenance mode is active, only add routes that genuinely need to remain public.
 
 ## Installation
 
-1. Upload the plugin directory to `/wp-content/plugins/` or install a plugin ZIP.
-2. Activate **Simple Maintenance Mode**.
-3. Open **Maintenance** in the WordPress admin.
-4. Configure the page design and access options.
-5. Select **Coming Soon** or **Maintenance** and save.
+1. Upload `simple-maintenance-mode` to `/wp-content/plugins/`.
+2. Activate **Simple Maintenance Mode** in WordPress.
+3. Open **Maintenance** in the WordPress admin menu.
+4. Configure the page and enable Coming Soon or Maintenance mode when ready.
 
-## Bypass links
+## Bypass access
 
-When enabled, the plugin generates a private URL containing a random token. Visiting the URL validates the token, stores an HTTP-only cookie for the configured duration, and redirects to a clean URL with the token removed. Regenerating the token invalidates previously issued bypass cookies and URLs.
+When secure bypass links are enabled, the settings page generates a unique URL. Opening that URL stores an HTTP-only SameSite cookie for the configured duration and removes the token from the visible browser URL. Regenerating the token invalidates previous bypass links and cookies.
 
-## HTTP response guidance
+## HTTP response behavior
 
-The default **Automatic** behavior is recommended:
+- **Maintenance:** defaults to HTTP 503 Service Unavailable.
+- **Coming Soon:** defaults to HTTP 200 OK.
+- Administrators can override the response code when needed.
 
-- Maintenance mode: `503 Service Unavailable`
-- Coming Soon mode: `200 OK`
+A 503 response also sends the configured `Retry-After` header.
 
-You can override either behavior in the settings screen. A `503` response can also include a configurable `Retry-After` value.
+## Security notes
 
-## Custom WordPress page
+- Maintenance access checks use explicit WordPress admin/login rules rather than broad URL substring matching.
+- Bypass tokens use cryptographically secure random values and constant-time comparison.
+- Settings are protected by WordPress capabilities and nonces.
+- Configurable enumerated values are allowlisted and numeric values are clamped to supported ranges.
+- Custom login and exempt URL rules are normalized to same-site paths before being stored.
 
-You can use the plugin's self-contained template or choose an existing published WordPress page. The plugin template is the most isolated and lightweight option; the WordPress-page option is useful when you want your theme or page builder to render the maintenance content.
+## Version 2.0
 
-## Update mechanism
-
-The previous custom updater has been removed in 2.0 because it contained stale code from unrelated plugins. A replacement update mechanism will be implemented separately.
-
-## Changelog
-
-### 2.0.0
-
-- Rebuilt request handling and bypass security.
-- Added configurable HTTP response behavior.
-- Added REST/XML-RPC restriction options.
-- Replaced bundled backgrounds with CSS gradients.
-- Added six layouts and expanded design controls.
-- Added CTA, typography, logo sizing, and panel controls.
-- Redesigned the admin experience and plugin discoverability.
-- Removed the obsolete updater.
-- Updated WordPress compatibility metadata.
-
-### 1.0.2
-
-- Added bypass URL, countdown, backgrounds, and customization.
-
-### 1.0.1
-
-- Bug fixes and improvements.
-
-### 1.0.0
-
-- Initial release.
+Version 2.0 is a major refactor focused on security, compatibility, smaller distribution size, and usability. The previous custom updater has been removed and will be replaced separately.
 
 ## License
 
