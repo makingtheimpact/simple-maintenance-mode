@@ -1,88 +1,89 @@
-# Simple-Maintenance-Mode
-Simple WordPress plugin to hide the website from the public while it is being worked on or built.
+# Simple Maintenance Mode
 
-## Description
-This lightweight plugin makes it easy make your website hidden from public access using a page redirect that takes the user to a page of your choosing. 
+A lightweight WordPress maintenance and coming-soon plugin with secure bypass access, flexible layouts, and no bundled stock-background bloat.
 
-You can choose from 3 modes: 
-1. Online (default)
-2. Coming Soon - for new websites that are under construction
-3. Maintenance Mode - for existing websites undergoing changes
+## Modes
 
-### Features: 
-* Unique preview link - view the website while hidden from public
-* Page selector - choose the page you want users to be redirected to or display default content
-* Copyable bypass URL - copy the URL to the clipboard so you can easily share it with others
-* 12 hour cookie expiration - the bypass URL will create a cookie on the device that expires after 12 hours. So long as the unique key remains unchanged, the link can be used repeatedly, each time setting a cookie with the 12 hour expiration. 
-* Countdown timer - display a countdown timer to the date you want the website to be live
-* Background images and customizable coming soon/maintenance mode page
-* Preview coming soon/maintenance mode page
+- **Online** — normal public access.
+- **Coming Soon** — hides the normal site while presenting a launch page. Automatic HTTP mode returns `200 OK`.
+- **Maintenance** — hides the normal site during temporary work. Automatic HTTP mode returns `503 Service Unavailable` with a configurable `Retry-After` header.
 
-### How It Works: 
-**Online Mode:** When in online mode, the website is fully accessible. 
+## Version 2.0 features
 
-**Coming Soon Mode:** When set to Coming Soon, the website becomes hidden from the public. They will not be able to access any of the pages of the website, except the one that you specify them to be redirected to in the settings. 
+- Six built-in layouts: Centered, Centered Card, Split Left, Split Right, Bottom Panel, and Minimal.
+- Solid-color, CSS-gradient, custom image, and custom video backgrounds.
+- Eleven lightweight CSS gradient presets instead of bundled background images.
+- Logo upload and width controls.
+- Heading/body size, font, weight, alignment, color, width, spacing, radius, panel, and shadow controls.
+- Optional countdown and call-to-action button.
+- Safe advanced HTML content area.
+- Secure bypass URLs with configurable duration and token regeneration.
+- Bypass tokens are removed from the visible browser URL after successful authorization.
+- Optional public REST API blocking and XML-RPC disabling while maintenance mode is active.
+- Automatic or manual `200` / `503` response control.
+- Top-level **Maintenance** admin menu, direct Plugins-screen Settings link, toolbar status, and admin warning while restricted mode is active.
+- Administrator-only preview.
+- Compatible metadata updated for WordPress 7.1 and PHP 7.4+.
 
-**Maintenance Mode:** Much like Coming Soon mode, in maintenance mode, the website is hidden and inaccessible to the public. Users will be redirected to a page that you specify in the settings. 
+## Security changes in 2.0
 
-While in the Coming Soon or Maintenance modes, the login page will remain accessible so that admins can still access the website. 
-
-If you or another user want to preview the website without logging in as an administrator, you can use the link the plugin generates that has a unique key that lets you bypass the redirect and access the website normally. 
-
-The special link creates a cookie on the device that expires after 12 hours. So long as the unique key remains unchanged, the link can be used repeatedly, each time setting a cookie with the 12 hour expiration. 
+The request gate was rebuilt rather than extending the old substring-based URL checks. The plugin now uses exact WordPress login/admin handling, capability checks, constant-time token comparison with `hash_equals()`, HTTP-only bypass cookies, input allowlists, clamped numeric settings, WordPress nonces, safe HTML filtering, and WordPress HTTP status/cache APIs.
 
 ## Installation
-This plugin is only compatible with WordPress. To install it on your WordPress website, follow the directions below:
 
-1. Upload `simple-maintenance-mode` to the `/wp-content/plugins/` directory.
-2. Activate the plugin through the 'Plugins' menu in WordPress.
-3. Configure the plugin settings as needed.
+1. Upload the plugin directory to `/wp-content/plugins/` or install a plugin ZIP.
+2. Activate **Simple Maintenance Mode**.
+3. Open **Maintenance** in the WordPress admin.
+4. Configure the page design and access options.
+5. Select **Coming Soon** or **Maintenance** and save.
 
-## Frequently Asked Questions
-**It won't let me access the login page. What do I do?**
-In some cases, if you have a unique setup where the login is different from the default, it may create a situation where the login page is no longer accessible. 
+## Bypass links
 
-If this happens to you, you can use FTP or access the file manager of the hosting to rename the directory for this plugin and it should disable it. Failing that, you can try deleting it. 
+When enabled, the plugin generates a private URL containing a random token. Visiting the URL validates the token, stores an HTTP-only cookie for the configured duration, and redirects to a clean URL with the token removed. Regenerating the token invalidates previously issued bypass cookies and URLs.
 
-You can submit an issue on GitHub or contact me with details about the login page setup you have so that it can be fixed in the next update. 
+## HTTP response guidance
 
-**I disabled the coming soon/maintenance mode, but the website is still redirecting (or vice versa). What do I do?**
-Chances are this issue has to do with caching. If you have a caching plugin on your website, be sure to clear the cache each time you change the mode. 
+The default **Automatic** behavior is recommended:
 
-If the issue is isolated to one or a few users, the issue is likely that the browser has cached the files. Try clearing the browser's cache and accessing the website again. If the issue persists, try another web browser or device and see if the behavior continues. 
+- Maintenance mode: `503 Service Unavailable`
+- Coming Soon mode: `200 OK`
 
-If problems persist, you can report the issue on GitHub or contact me.
+You can override either behavior in the settings screen. A `503` response can also include a configurable `Retry-After` value.
 
-## Screenshots
-Coming soon...
+## Custom WordPress page
+
+You can use the plugin's self-contained template or choose an existing published WordPress page. The plugin template is the most isolated and lightweight option; the WordPress-page option is useful when you want your theme or page builder to render the maintenance content.
+
+## Update mechanism
+
+The previous custom updater has been removed in 2.0 because it contained stale code from unrelated plugins. A replacement update mechanism will be implemented separately.
 
 ## Changelog
 
-### 1.0.2
-- Added copyable bypass URL
-- Added 12 hour cookie expiration
-- Added countdown timer
-- Added background images and customizable coming soon/maintenance mode page
+### 2.0.0
 
-### 1.0.1
-- Bug fixes and improvements
-
-### 1.0.0
-- Initial release of the plugin.
-
-## Upgrade Notice
+- Rebuilt request handling and bypass security.
+- Added configurable HTTP response behavior.
+- Added REST/XML-RPC restriction options.
+- Replaced bundled backgrounds with CSS gradients.
+- Added six layouts and expanded design controls.
+- Added CTA, typography, logo sizing, and panel controls.
+- Redesigned the admin experience and plugin discoverability.
+- Removed the obsolete updater.
+- Updated WordPress compatibility metadata.
 
 ### 1.0.2
-- Improved version of the plugin with more features and bug fixes.
+
+- Added bypass URL, countdown, backgrounds, and customization.
 
 ### 1.0.1
+
 - Bug fixes and improvements.
 
 ### 1.0.0
-- First release of the plugin, no upgrade notices.
 
-## Contributing
-Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
+- Initial release.
 
 ## License
-This plugin is open-sourced software licensed under the [GPLv2](https://www.gnu.org/licenses/gpl-2.0.html) license.
+
+GPL-2.0-or-later.
