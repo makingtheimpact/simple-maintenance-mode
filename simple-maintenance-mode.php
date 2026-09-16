@@ -2,9 +2,9 @@
 /**
  * Plugin Name:         Simple Maintenance Mode
  * Plugin URI:          https://makingtheimpact.com/wordpress-plugins
- * Description:         A simple maintenance mode plugin with bypass link.
- * Version:             1.0.2
- * Requires at least:   6.4.2
+ * Description:         A lightweight maintenance and coming-soon plugin with secure bypass links and customizable layouts.
+ * Version:             2.0.0
+ * Requires at least:   6.4
  * Requires PHP:        7.4
  * Author:              Making The Impact LLC
  * Author URI:          https://makingtheimpact.com
@@ -14,909 +14,519 @@
  * Domain Path:         /languages
  */
 
-
-$simple_maintenance_mode_version = "1.0.2";
-
-/* TOKEN TO BYPASS COMING SOON/MAINTENANCE MODE */
-// Generate a random token
-function simple_maintenance_mode_generate_random_token() {
-    return bin2hex(openssl_random_pseudo_bytes(16)); // 32 characters
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
 }
 
-// Save the token to the WordPress options table
-function simple_maintenance_mode_save_bypass_token() {
-    $new_token = simple_maintenance_mode_generate_random_token();
-    update_option('simple_maintenance_mode_bypass_token', $new_token);
-    return $new_token;
+define( 'SMM_VERSION', '2.0.0' );
+define( 'SMM_FILE', __FILE__ );
+define( 'SMM_DIR', plugin_dir_path( __FILE__ ) );
+define( 'SMM_URL', plugin_dir_url( __FILE__ ) );
+
+function smm_defaults() {
+    return array(
+        'status'                 => 'online',
+        'page_id'                => 0,
+        'response_code'          => 'auto',
+        'retry_after'            => 3600,
+        'bypass_enabled'         => 1,
+        'bypass_duration'        => 12,
+        'custom_login_url'       => '',
+        'exempt_urls'            => '',
+        'layout'                 => 'centered-card',
+        'background_type'        => 'gradient',
+        'gradient_preset'        => 'ocean',
+        'gradient_color_1'       => '#0f172a',
+        'gradient_color_2'       => '#2563eb',
+        'gradient_angle'         => 135,
+        'background_color'       => '#0f172a',
+        'background_image'       => '',
+        'background_video'       => '',
+        'background_alignment'   => 'center center',
+        'background_size'        => 'cover',
+        'overlay_color'          => '#000000',
+        'overlay_opacity'        => 20,
+        'logo_image'             => '',
+        'logo_width'             => 180,
+        'heading'                => '',
+        'message'                => '',
+        'text_color'             => '#ffffff',
+        'heading_size'           => 44,
+        'body_size'              => 19,
+        'font_family'            => 'system',
+        'font_weight'            => '700',
+        'text_align'             => 'center',
+        'content_width'          => 720,
+        'content_bg_color'       => '#0f172a',
+        'content_bg_opacity'     => 55,
+        'box_padding'            => 48,
+        'border_radius'          => 20,
+        'box_shadow_opacity'     => 25,
+        'show_countdown'         => 0,
+        'countdown_date'         => '',
+        'show_button'            => 0,
+        'button_label'           => '',
+        'button_url'             => '',
+        'button_new_tab'         => 0,
+        'button_bg_color'        => '#ffffff',
+        'button_text_color'      => '#0f172a',
+        'custom_content'         => '',
+        'block_rest_api'         => 1,
+        'block_xmlrpc'           => 1,
+    );
 }
 
-// Retrieve the token from the WordPress options table
-function simple_maintenance_mode_get_bypass_token() {
-    return get_option('simple_maintenance_mode_bypass_token', '');
+function smm_get( $key ) {
+    $defaults = smm_defaults();
+    $option_map = array(
+        'status'  => 'simple_maintenance_mode_status',
+        'page_id' => 'simple_maintenance_mode_page',
+    );
+    $option = isset( $option_map[ $key ] ) ? $option_map[ $key ] : 'smm_' . $key;
+    return get_option( $option, isset( $defaults[ $key ] ) ? $defaults[ $key ] : '' );
 }
 
-// Check if the current request has the bypass token and set a secure cookie
-function simple_maintenance_mode_check_bypass_token() {
-    $token = simple_maintenance_mode_get_bypass_token();
-    $secure = is_ssl(); // Check if the connection is over HTTPS
-    
-    // Validate the token from the URL and set a secure cookie
-    if (isset($_GET['mct_token']) && $_GET['mct_token'] === $token) {
-        $url = home_url(); // Retrieves the home URL of the site.
-        $parsed_url = parse_url($url); // Parse the URL to get its components.
-        $domain = $parsed_url['host']; // Get the host component which is your domain.
+function smm_is_active() {
+    return in_array( smm_get( 'status' ), array( 'maintenance', 'coming_soon' ), true );
+}
 
-        // Prepend a dot to make cookie valid across all subdomains
-        if (substr_count($domain, '.') == 1) {
-            $domain = '.' . $domain;
+function smm_generate_bypass_token() {
+    try {
+        return bin2hex( random_bytes( 24 ) );
+    } catch ( Exception $e ) {
+        return wp_generate_password( 48, false, false );
+    }
+}
+
+function smm_get_bypass_token() {
+    $token = get_option( 'simple_maintenance_mode_bypass_token', '' );
+    if ( empty( $token ) ) {
+        $token = smm_generate_bypass_token();
+        update_option( 'simple_maintenance_mode_bypass_token', $token, false );
+    }
+    return $token;
+}
+
+function smm_regenerate_bypass_token() {
+    $token = smm_generate_bypass_token();
+    update_option( 'simple_maintenance_mode_bypass_token', $token, false );
+    return $token;
+}
+
+function smm_has_valid_bypass_cookie() {
+    if ( ! smm_get( 'bypass_enabled' ) || empty( $_COOKIE['smm_bypass'] ) ) {
+        return false;
+    }
+    $token  = smm_get_bypass_token();
+    $cookie = sanitize_text_field( wp_unslash( $_COOKIE['smm_bypass'] ) );
+    return ! empty( $token ) && hash_equals( $token, $cookie );
+}
+
+function smm_handle_bypass_request() {
+    if ( ! smm_get( 'bypass_enabled' ) || empty( $_GET['smm_token'] ) ) {
+        return false;
+    }
+
+    $provided = sanitize_text_field( wp_unslash( $_GET['smm_token'] ) );
+    $token    = smm_get_bypass_token();
+    if ( empty( $token ) || ! hash_equals( $token, $provided ) ) {
+        return false;
+    }
+
+    $hours = max( 1, min( 168, absint( smm_get( 'bypass_duration' ) ) ) );
+    setcookie(
+        'smm_bypass',
+        $token,
+        array(
+            'expires'  => time() + ( HOUR_IN_SECONDS * $hours ),
+            'path'     => COOKIEPATH ? COOKIEPATH : '/',
+            'secure'   => is_ssl(),
+            'httponly' => true,
+            'samesite' => 'Lax',
+        )
+    );
+    $_COOKIE['smm_bypass'] = $token;
+
+    $clean_url = remove_query_arg( 'smm_token' );
+    wp_safe_redirect( $clean_url ? $clean_url : home_url( '/' ) );
+    exit;
+}
+
+function smm_normalize_exempt_path( $value ) {
+    $value = trim( (string) $value );
+    if ( '' === $value ) {
+        return '';
+    }
+
+    $wildcard = '*' === substr( $value, -1 );
+    if ( $wildcard ) {
+        $value = rtrim( substr( $value, 0, -1 ) );
+    }
+
+    if ( preg_match( '#^https?://#i', $value ) ) {
+        $parts     = wp_parse_url( $value );
+        $home_host = wp_parse_url( home_url( '/' ), PHP_URL_HOST );
+        if ( empty( $parts['host'] ) || empty( $home_host ) || 0 !== strcasecmp( $parts['host'], $home_host ) ) {
+            return '';
         }
+        $value = isset( $parts['path'] ) ? $parts['path'] : '/';
+    } else {
+        $value = strtok( $value, '?#' );
+    }
 
-        // Secure cookie flags
-        $cookie_options = array(
-            'expires' => time() + 43200, // 12 hour validity
-            'path' => '/',
-            'domain' => $domain,
-            'secure' => $secure, // Only set to true if your site uses HTTPS
-            'httponly' => true, // Cookie is accessible only through the HTTP protocol
-            'samesite' => 'Lax' // Helps against CSRF
-        );
-        
-        // Set the cookie
-        setcookie('maintenance_bypass', $token, $cookie_options);
-        $_COOKIE['maintenance_bypass'] = $token; // Set for immediate availability
+    $value = '/' . ltrim( (string) $value, '/' );
+    $value = preg_replace( '#/+#', '/', $value );
+    if ( '/' !== $value ) {
+        $value = untrailingslashit( $value );
+    }
+
+    return $value . ( $wildcard ? '*' : '' );
+}
+
+function smm_sanitize_exempt_urls( $value ) {
+    $lines = preg_split( '/\r\n|\r|\n/', wp_unslash( (string) $value ) );
+    $clean = array();
+    foreach ( $lines as $line ) {
+        $path = smm_normalize_exempt_path( sanitize_text_field( $line ) );
+        if ( '' !== $path && '/' !== $path ) {
+            $clean[] = $path;
+        }
+    }
+    return implode( "\n", array_values( array_unique( $clean ) ) );
+}
+
+function smm_current_request_path() {
+    $request_uri = isset( $_SERVER['REQUEST_URI'] ) ? wp_unslash( $_SERVER['REQUEST_URI'] ) : '/';
+    $path = wp_parse_url( $request_uri, PHP_URL_PATH );
+    if ( ! is_string( $path ) || '' === $path ) {
+        return '/';
+    }
+    $path = '/' . ltrim( $path, '/' );
+    $path = preg_replace( '#/+#', '/', $path );
+    return '/' === $path ? '/' : untrailingslashit( $path );
+}
+
+function smm_path_matches_exemption( $request_path, $rule ) {
+    $rule = smm_normalize_exempt_path( $rule );
+    if ( '' === $rule || '/' === $rule ) {
+        return false;
+    }
+
+    if ( '*' === substr( $rule, -1 ) ) {
+        $prefix = untrailingslashit( substr( $rule, 0, -1 ) );
+        return $prefix && ( $request_path === $prefix || 0 === strpos( $request_path . '/', $prefix . '/' ) );
+    }
+
+    return $request_path === $rule;
+}
+
+function smm_current_path_is_exempt() {
+    $request_path = smm_current_request_path();
+    $rules = array();
+
+    $custom_login = smm_normalize_exempt_path( smm_get( 'custom_login_url' ) );
+    if ( $custom_login ) {
+        $rules[] = $custom_login;
+    }
+
+    $additional = preg_split( '/\r\n|\r|\n/', (string) smm_get( 'exempt_urls' ) );
+    foreach ( $additional as $rule ) {
+        $rule = trim( $rule );
+        if ( '' !== $rule ) {
+            $rules[] = $rule;
+        }
+    }
+
+    foreach ( $rules as $rule ) {
+        if ( smm_path_matches_exemption( $request_path, $rule ) ) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function smm_request_is_allowed() {
+    if ( ! smm_is_active() ) {
+        return true;
+    }
+    if ( wp_doing_cron() || wp_doing_ajax() || is_customize_preview() ) {
+        return true;
+    }
+    if ( is_admin() || current_user_can( 'manage_options' ) ) {
+        return true;
+    }
+    if ( smm_has_valid_bypass_cookie() ) {
         return true;
     }
 
-    // Check if the bypass cookie is present and matches the stored token
-    if (isset($_COOKIE['maintenance_bypass']) && $_COOKIE['maintenance_bypass'] === $token) {
+    global $pagenow;
+    if ( 'wp-login.php' === $pagenow ) {
+        return true;
+    }
+
+    if ( smm_current_path_is_exempt() ) {
         return true;
     }
 
     return false;
 }
 
-// Modify the maintenance page display function
-function simple_maintenance_mode_show_maintenance_page() {
-    // Early exit for AJAX, admin, cron, and customizer
-    if (wp_doing_ajax() || wp_doing_cron() || is_customize_preview()) {
+function smm_effective_response_code() {
+    $setting = (string) smm_get( 'response_code' );
+    if ( in_array( $setting, array( '200', '503' ), true ) ) {
+        return (int) $setting;
+    }
+    return 'maintenance' === smm_get( 'status' ) ? 503 : 200;
+}
+
+function smm_send_headers() {
+    $code = smm_effective_response_code();
+    status_header( $code );
+    nocache_headers();
+    header( 'X-Content-Type-Options: nosniff' );
+    header( 'X-Frame-Options: SAMEORIGIN' );
+    header( 'Referrer-Policy: strict-origin-when-cross-origin' );
+    if ( 503 === $code ) {
+        header( 'Retry-After: ' . max( 60, min( 604800, absint( smm_get( 'retry_after' ) ) ) ) );
+    }
+}
+
+function smm_get_default_heading( $mode ) {
+    return 'maintenance' === $mode ? __( "We'll Be Right Back", 'simple-maintenance-mode' ) : __( 'Something New Is Coming', 'simple-maintenance-mode' );
+}
+
+function smm_get_default_message( $mode ) {
+    return 'maintenance' === $mode
+        ? __( "We're making a few improvements to our website. Please check back shortly.", 'simple-maintenance-mode' )
+        : __( "We're putting the finishing touches on our new website. Check back soon.", 'simple-maintenance-mode' );
+}
+
+function smm_get_template_settings() {
+    $mode = 'maintenance' === smm_get( 'status' ) ? 'maintenance' : 'coming_soon';
+    $defaults = smm_defaults();
+    $settings = array( 'mode' => $mode );
+    foreach ( array_keys( $defaults ) as $key ) {
+        $settings[ $key ] = smm_get( $key );
+    }
+    if ( empty( $settings['heading'] ) ) {
+        $settings['heading'] = smm_get_default_heading( $mode );
+    }
+    if ( empty( $settings['message'] ) ) {
+        $settings['message'] = smm_get_default_message( $mode );
+    }
+    return $settings;
+}
+
+function smm_render_maintenance_page() {
+    if ( ! smm_is_active() ) {
         return;
     }
 
-    // Allow admin access
-    if (is_admin()) {
+    if ( ! empty( $_GET['smm_token'] ) ) {
+        smm_handle_bypass_request();
+    }
+
+    if ( smm_request_is_allowed() ) {
         return;
     }
 
-    // Check if user should bypass
-    if (simple_maintenance_mode_check_bypass_token() || current_user_can('manage_options') || 
-        strpos($_SERVER['REQUEST_URI'], 'wp-login') !== false || 
-        strpos($_SERVER['REQUEST_URI'], 'wp-login.php') !== false || 
-        strpos($_SERVER['REQUEST_URI'], 'wp-login.php?action=lostpassword') !== false || 
-        strpos($_SERVER['REQUEST_URI'], 'login') !== false) {
-        return;
-    }
-
-    $status = get_option('simple_maintenance_mode_status', 'online');
-    
-    if ($status !== 'online') {
-        // Set security headers
-        header('HTTP/1.1 503 Service Unavailable');
-        header('Content-Type: text/html; charset=UTF-8');
-        header('Retry-After: 3600');
-        header('X-Frame-Options: SAMEORIGIN');
-        header('X-Content-Type-Options: nosniff');
-        header('X-XSS-Protection: 1; mode=block');
-        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-        header('Pragma: no-cache');
-        header('Expires: Thu, 01 Dec 1994 16:00:00 GMT');
-
-        $page_id = get_option('simple_maintenance_mode_page', '');
-        $current_page_id = get_queried_object_id();
-        
-        // If using a custom page and we're not on that page, redirect to it
-        if (!empty($page_id) && get_post($page_id)) {
-            if ($current_page_id != $page_id) {
-                wp_redirect(get_permalink($page_id));
-                exit();
-            }
-            // If we are on the custom page, show it
+    $page_id = absint( smm_get( 'page_id' ) );
+    if ( $page_id && 'publish' === get_post_status( $page_id ) ) {
+        if ( get_queried_object_id() === $page_id ) {
+            smm_send_headers();
             return;
         }
-
-        // Using plugin template - get all necessary settings
-        $mode = ($status === 'maintenance') ? 'maintenance' : 'coming_soon';
-        $settings = array(
-            'mode' => $mode,
-            'background_type' => get_option('smm_background_type', 'image'),
-            'background_image' => get_option('smm_background_image', ''),
-            'background_video' => get_option('smm_background_video', ''),
-            'background_alignment' => get_option('smm_background_alignment', 'center center'),
-            'background_size' => get_option('smm_background_size', 'cover'),
-            'background_color' => get_option('smm_background_color', '#ffffff'),
-            'overlay_color' => get_option('smm_overlay_color', '#000000'),
-            'overlay_opacity' => get_option('smm_overlay_opacity', '50'),
-            'text_color' => get_option('smm_text_color', '#ffffff'),
-            'custom_content' => get_option('smm_custom_content', ''),
-            'logo_image' => get_option('smm_logo_image', ''),
-            'show_countdown' => get_option('smm_show_countdown', false),
-            'countdown_date' => get_option('smm_countdown_date', ''),
-            'display_mode' => get_option('smm_display_mode', 'fullscreen'),
-            'content_bg_color' => get_option('smm_content_bg_color', '#ffffff'),
-            'content_bg_opacity' => get_option('smm_content_bg_opacity', 0),
-            'box_padding' => get_option('smm_box_padding', 0),
-            'box_shadow_color' => get_option('smm_box_shadow_color', '#000000'),
-            'box_shadow_opacity' => get_option('smm_box_shadow_opacity', 0)
-        );
-
-        // If no custom content is set, use default content
-        if (empty($settings['custom_content'])) {
-            $settings['custom_content'] = simple_maintenance_mode_get_default_content($mode);
-        }
-
-        // Extract settings to make them available as variables in the template
-        extract($settings);
-        
-        // Ensure this is done before the HTML output
-        $display_mode = get_option('smm_display_mode', 'fullscreen');
-        
-        // Include the template
-        include plugin_dir_path(__FILE__) . 'maintenance-fullscreen-template.php';
-        exit();
-    }
-}
-
-// Create a menu item for the plugin in the admin dashboard
-function simple_maintenance_mode_admin_menu() {
-    add_options_page(
-        'Maintenance Mode Settings',
-        'Maintenance Mode',
-        'manage_options',
-        'maintenance-mode-settings',
-        'simple_maintenance_mode_settings_page'
-    );
-}
-add_action('admin_menu', 'simple_maintenance_mode_admin_menu');
-
-// Admin notice for settings update
-function show_simple_maintenance_mode_admin_notice() {
-    if (get_transient('simple_maintenance_mode_settings_saved')) {
-        echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__('Settings saved successfully.', 'text-domain') . '</p></div>';
-        delete_transient('simple_maintenance_mode_settings_saved');
-    }
-}
-add_action('admin_notices', 'show_simple_maintenance_mode_admin_notice');
-
-// Add this function to handle default content
-function simple_maintenance_mode_get_default_content($mode) {
-    if ($mode === 'maintenance') {
-        return wp_kses_post('
-<div style="text-align: center;">
-    <h1>Under Maintenance</h1>
-    <p>We are currently performing scheduled maintenance on our website to bring you an even better experience.</p>
-    <p>We will be back online shortly. Thank you for your patience!</p>
-</div>');
-    } else { // coming soon
-        return wp_kses_post('
-<div style="text-align: center;">
-    <h1>Coming Soon</h1>
-    <p>We are working hard to bring you something amazing!</p>
-    <p>Our new website is under construction and will be launching soon.</p>
-    <p>Stay tuned for updates!</p>
-</div>');
-    }
-}
-
-// Add this JavaScript to handle mode changes
-add_action('admin_footer', 'simple_maintenance_mode_admin_footer_script');
-function simple_maintenance_mode_admin_footer_script() {
-    ?>
-    <script type="text/javascript">
-    jQuery(document).ready(function($) {
-        // Only run on our settings page
-        if ($('#simple_maintenance_mode_status').length) {
-            var editor = tinymce.get('smm_custom_content');
-            var currentContent = editor ? editor.getContent() : $('#smm_custom_content').val();
-            
-            $('#simple_maintenance_mode_status').on('change', function() {
-                var mode = $(this).val();
-                if (mode !== 'online') {
-                    // Only update if the editor is empty
-                    if (!currentContent || currentContent.trim() === '') {
-                        $.post(ajaxurl, {
-                            action: 'get_default_content',
-                            mode: mode,
-                            nonce: '<?php echo wp_create_nonce('smm_get_default_content'); ?>'
-                        }, function(response) {
-                            if (response.success && editor) {
-                                editor.setContent(response.data);
-                                currentContent = response.data;
-                            }
-                        });
-                    }
-                }
-            });
-
-            // Update currentContent when the editor changes
-            if (editor) {
-                editor.on('change', function() {
-                    currentContent = editor.getContent();
-                });
-            }
-        }
-    });
-    </script>
-    <?php
-}
-
-// Add AJAX handler for getting default content
-add_action('wp_ajax_get_default_content', 'simple_maintenance_mode_get_default_content_ajax');
-function simple_maintenance_mode_get_default_content_ajax() {
-    check_ajax_referer('smm_get_default_content', 'nonce');
-    
-    $mode = isset($_POST['mode']) ? sanitize_text_field($_POST['mode']) : 'coming_soon';
-    wp_send_json_success(simple_maintenance_mode_get_default_content($mode));
-}
-
-// Modify the settings page function to handle default content
-function simple_maintenance_mode_settings_page() {
-    if (!current_user_can('manage_options')) {
-        return;
-    }
-
-    // Save settings
-    if (isset($_POST['simple_maintenance_mode_nonce']) && wp_verify_nonce($_POST['simple_maintenance_mode_nonce'], 'simple_maintenance_mode_save_settings')) {
-        // Save existing settings
-        if (isset($_POST['simple_maintenance_mode_status'])) {
-            update_option('simple_maintenance_mode_status', sanitize_text_field($_POST['simple_maintenance_mode_status']));
-        }
-
-        // Save custom page selection
-        if (isset($_POST['simple_maintenance_mode_page'])) {
-            update_option('simple_maintenance_mode_page', absint($_POST['simple_maintenance_mode_page']));
-        }
-
-        // Generate new bypass token if requested
-        if (isset($_POST['simple_maintenance_mode_new_token'])) {
-            simple_maintenance_mode_save_bypass_token();
-        }
-
-        // Save the image and logo
-        if (isset($_POST['smm_background_image'])) {
-            update_option('smm_background_image', sanitize_text_field($_POST['smm_background_image']));
-        }
-        if (isset($_POST['smm_logo_image'])) {
-            update_option('smm_logo_image', sanitize_text_field($_POST['smm_logo_image']));
-        }
-
-        // Save new settings
-        $fields = array(
-            'smm_background_type' => 'sanitize_text_field',
-            'smm_background_alignment' => 'sanitize_text_field',
-            'smm_background_size' => 'sanitize_text_field',
-            'smm_background_color' => 'sanitize_hex_color',
-            'smm_overlay_color' => 'sanitize_hex_color',
-            'smm_overlay_opacity' => 'absint',
-            'smm_text_color' => 'sanitize_hex_color',
-            'smm_show_countdown' => 'rest_sanitize_boolean',
-            'smm_countdown_date' => 'sanitize_text_field'
-        );
-
-        foreach ($fields as $field => $sanitize_callback) {
-            if (isset($_POST[$field])) {
-                update_option($field, $sanitize_callback($_POST[$field]));
-            }
-        }
-
-        if (isset($_POST['smm_display_mode'])) {
-            update_option('smm_display_mode', sanitize_text_field($_POST['smm_display_mode']));
-        }
-        if (isset($_POST['smm_box_padding'])) {
-            update_option('smm_box_padding', intval($_POST['smm_box_padding']));
-        }
-        if (isset($_POST['smm_box_shadow_color'])) {
-            update_option('smm_box_shadow_color', sanitize_hex_color($_POST['smm_box_shadow_color']));
-        }
-        if (isset($_POST['smm_box_shadow_opacity'])) {
-            update_option('smm_box_shadow_opacity', intval($_POST['smm_box_shadow_opacity']));
-        }
-
-        if (isset($_POST['smm_content_bg_color'])) {
-            update_option('smm_content_bg_color', sanitize_hex_color($_POST['smm_content_bg_color']));
-        }
-        if (isset($_POST['smm_content_bg_opacity'])) {
-            update_option('smm_content_bg_opacity', intval($_POST['smm_content_bg_opacity']));
-        }
-
-        if (isset($_POST['smm_custom_content'])) {
-            $custom_content = wp_unslash($_POST['smm_custom_content']);
-            update_option('smm_custom_content', wp_kses_post($custom_content));
-        }
-
-        if (isset($_POST['smm_background_video'])) {
-            update_option('smm_background_video', esc_url_raw($_POST['smm_background_video']));
-        }
-
-        set_transient('simple_maintenance_mode_settings_saved', true, 10);
-    }
-
-    // Get current settings
-    $status = get_option('simple_maintenance_mode_status', 'online');
-    $page = get_option('simple_maintenance_mode_page', '');
-    $token = simple_maintenance_mode_get_bypass_token();
-    $background_type = get_option('smm_background_type', 'image');
-    $background_image = get_option('smm_background_image', '');
-    $background_video = get_option('smm_background_video', '');
-    $background_alignment = get_option('smm_background_alignment', 'center center');
-    $background_size = get_option('smm_background_size', 'cover');
-    $background_color = get_option('smm_background_color', '#ffffff');
-    $overlay_color = get_option('smm_overlay_color', 'rgba(0,0,0,0.5)');
-    $display_mode = get_option('smm_display_mode', 'fullscreen');
-    $content_bg_color = get_option('smm_content_bg_color', '#ffffff');
-    $content_bg_opacity = get_option('smm_content_bg_opacity', 0);
-    $box_padding = get_option('smm_box_padding', 0);
-    $box_shadow_color = get_option('smm_box_shadow_color', '#000000');
-    $box_shadow_opacity = get_option('smm_box_shadow_opacity', 0);
-    $custom_content = htmlspecialchars_decode(get_option('smm_custom_content', ''));
-    if ($custom_content !== '') { 
-        $custom_content = wp_unslash($custom_content); // remove slashes
-    }
-    if (empty($custom_content)) {
-        $custom_content = simple_maintenance_mode_get_default_content($status);
-    }
-    $logo_image = get_option('smm_logo_image', '');
-    $show_countdown = get_option('smm_show_countdown', false);
-    $countdown_date = get_option('smm_countdown_date', '');
-
-    // Get list of background images from assets folder
-    $backgrounds_dir = plugin_dir_path(__FILE__) . 'assets/backgrounds/';
-    $backgrounds_url = plugin_dir_url(__FILE__) . 'assets/backgrounds/';
-    $background_images = glob($backgrounds_dir . '*.{jpg,jpeg,png,gif}', GLOB_BRACE);
-    $background_images = array_map('basename', $background_images);
-
-    ?>
-    <div class="wrap">
-        <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
-        <form method="post" action="">
-            <?php wp_nonce_field('simple_maintenance_mode_save_settings', 'simple_maintenance_mode_nonce'); ?>
-            
-            <table class="form-table">
-                <tr>
-                    <th scope="row"><label for="simple_maintenance_mode_status">Website Status</label></th>
-                    <td>
-                        <select name="simple_maintenance_mode_status" id="simple_maintenance_mode_status">
-                            <option value="online" <?php selected($status, 'online'); ?>>Online</option>
-                            <option value="maintenance" <?php selected($status, 'maintenance'); ?>>Maintenance Mode</option>
-                            <option value="coming_soon" <?php selected($status, 'coming_soon'); ?>>Coming Soon</option>
-                        </select>
-                    </td>
-                </tr>
-
-                <tr>
-                    <th scope="row"><label for="simple_maintenance_mode_page">Custom Page</label></th>
-                    <td>
-                        <select name="simple_maintenance_mode_page" id="simple_maintenance_mode_page">
-                            <option value="">Use Plugin Template</option>
-                            <?php
-                            $pages = get_pages();
-                            foreach ($pages as $p) {
-                                printf(
-                                    '<option value="%s" %s>%s</option>',
-                                    esc_attr($p->ID),
-                                    selected($page, $p->ID, false),
-                                    esc_html($p->post_title)
-                                );
-                            }
-                            ?>
-                        </select>
-                        <p class="description">Select a custom page or use the plugin's template below.</p>
-                    </td>
-                </tr>
-
-                <tr>
-                    <th scope="row">Bypass Token</th>
-                    <td>
-                        <p>Current token: <code><?php echo esc_html($token); ?></code></p>
-                        <p>Bypass URL: <input type="text" id="bypass_url" value="<?php echo esc_url(add_query_arg('mct_token', $token, home_url())); ?>" style="width: 80%;" readonly>
-                        <button type="button" id="copyBypassUrl" class="button">Copy URL</button></p>
-                        <label style="margin-top: 5px; display: block;">
-                            <input type="checkbox" name="simple_maintenance_mode_new_token" value="1">
-                            Generate new bypass token
-                        </label>
-                        <p class="description">Share this URL to grant temporary access to your site while in maintenance mode.</p>
-                    </td>
-                </tr>
-
-                <tr><th scope="row"><h3>Background Settings</h3></th></tr>
-
-                <tr>
-                    <th scope="row"><label for="smm_background_type">Background Type</label></th>
-                    <td>
-                        <select name="smm_background_type" id="smm_background_type">
-                            <option value="image" <?php selected($background_type, 'image'); ?>>Image</option>
-                            <option value="video" <?php selected($background_type, 'video'); ?>>Video</option>
-                        </select>
-                    </td>
-                </tr>
-
-                <tr class="background-image-section" <?php echo $background_type === 'video' ? 'style="display:none;"' : ''; ?>>
-                    <th scope="row"><label>Background Image</label></th>
-                    <td>
-                        <div class="image-preview-wrapper-background">
-                            <img id="background_image_preview" src="<?php echo esc_url($background_image); ?>" style="max-width: 200px; display: <?php echo empty($background_image) ? 'none' : 'block'; ?>">
-                        </div>
-                        <input type="hidden" name="smm_background_image" id="smm_background_image" value="<?php echo esc_attr($background_image); ?>">
-                        <button type="button" class="button" id="upload_background_image">Upload Custom Image</button>
-                        <button type="button" class="button" id="remove_background_image" style="display: <?php echo empty($background_image) ? 'none' : 'inline-block'; ?>">Remove Image</button>
-                        
-                        <div class="predefined-backgrounds" style="margin-top: 20px;">
-                            <h4>Pre-installed Backgrounds</h4>
-                            <div class="background-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px;">
-                                <?php foreach ($background_images as $bg_image): ?>
-                                <div class="background-option" style="text-align: center;">
-                                    <img src="<?php echo esc_url($backgrounds_url . $bg_image); ?>" 
-                                         style="max-width: 150px; cursor: pointer; border: 2px solid transparent;"
-                                         data-url="<?php echo esc_url($backgrounds_url . $bg_image); ?>"
-                                         onclick="selectPredefinedBackground(this)">
-                                </div>
-                                <?php endforeach; ?>
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-
-                <tr class="background-video-section" <?php echo $background_type === 'image' ? 'style="display:none;"' : ''; ?>>
-                    <th scope="row"><label>Background Video</label></th>
-                    <td>
-                        <p id="video_preview_message" style="display: <?php echo empty($background_video) ? 'none' : 'block'; ?>">Video selected: <span id="video_name"><?php echo basename($background_video); ?></span></p>
-                        <video id="video_preview" src="<?php echo esc_url($background_video); ?>" style="max-width: 200px; display: <?php echo empty($background_video) ? 'none' : 'block'; ?>" controls></video>
-                        <input type="hidden" name="smm_background_video" id="smm_background_video" value="<?php echo esc_attr($background_video); ?>">
-                        <p><button type="button" class="button" id="upload_background_video">Choose Video</button>
-                        <button type="button" class="button" id="remove_background_video" style="display: <?php echo empty($background_video) ? 'none' : 'inline-block'; ?>">Remove Video</button></p>
-                        <p class="description">Upload MP4 video file (recommended max size: 10MB)</p>
-                    </td>
-                </tr>
-
-                <tr>
-                    <th scope="row"><label for="smm_background_alignment">Background Alignment</label></th>
-                    <td>
-                        <select name="smm_background_alignment" id="smm_background_alignment">
-                            <option value="center center" <?php selected($background_alignment, 'center center'); ?>>Center</option>
-                            <option value="top left" <?php selected($background_alignment, 'top left'); ?>>Top Left</option>
-                            <option value="top right" <?php selected($background_alignment, 'top right'); ?>>Top Right</option>
-                            <option value="bottom left" <?php selected($background_alignment, 'bottom left'); ?>>Bottom Left</option>
-                            <option value="bottom right" <?php selected($background_alignment, 'bottom right'); ?>>Bottom Right</option>
-                        </select>
-                    </td>
-                </tr>
-
-                <tr>
-                    <th scope="row"><label for="smm_background_size">Background Size</label></th>
-                    <td>
-                        <select name="smm_background_size" id="smm_background_size">
-                            <option value="cover" <?php selected($background_size, 'cover'); ?>>Cover</option>
-                            <option value="contain" <?php selected($background_size, 'contain'); ?>>Contain</option>
-                            <option value="auto" <?php selected($background_size, 'auto'); ?>>Auto</option>
-                        </select>
-                    </td>
-                </tr>
-
-                <tr>
-                    <th scope="row"><label for="smm_background_color">Background Color</label></th>
-                    <td>
-                        <input type="text" name="smm_background_color" id="smm_background_color" value="<?php echo esc_attr($background_color); ?>" class="color-picker">
-                    </td>
-                </tr>
-
-                <tr>
-                    <th scope="row"><label for="smm_overlay_color">Overlay Color</label></th>
-                    <td>
-                        <input type="text" 
-                               name="smm_overlay_color" 
-                               id="smm_overlay_color" 
-                               value="<?php echo esc_attr(get_option('smm_overlay_color', '#000000')); ?>" 
-                               class="color-picker">
-                    </td>
-                </tr>
-
-                <tr>
-                    <th scope="row"><label for="smm_overlay_opacity">Overlay Opacity</label></th>
-                    <td>
-                        <input type="range" 
-                               name="smm_overlay_opacity" 
-                               id="smm_overlay_opacity" 
-                               value="<?php echo esc_attr(get_option('smm_overlay_opacity', '50')); ?>" 
-                               min="0" 
-                               max="100" 
-                               step="1">
-                        <span id="opacity_value"><?php echo esc_html(get_option('smm_overlay_opacity', '50')); ?>%</span>
-                        <p class="description">Adjust the transparency of the overlay. 0% is fully transparent, 100% is fully opaque.</p>
-                    </td>
-                </tr>
-
-                <tr>
-                    <th scope="row"><label for="smm_display_mode">Content Display Mode</label></th>
-                    <td>
-                        <select name="smm_display_mode" id="smm_display_mode">
-                            <option value="fullscreen" <?php selected($display_mode, 'fullscreen'); ?>>Fullscreen</option>
-                            <option value="boxed" <?php selected($display_mode, 'boxed'); ?>>Boxed</option>
-                        </select>
-                    </td>
-                </tr>
-                <tr class="boxed-settings" <?php echo $display_mode === 'fullscreen' ? 'style="display:none;"' : ''; ?>>
-                    <th scope="row"><label for="smm_content_bg_color">Content Background Color</label></th>
-                    <td>
-                        <input type="text" name="smm_content_bg_color" id="smm_content_bg_color" value="<?php echo esc_attr($content_bg_color); ?>" class="color-picker">
-                    </td>
-                </tr>
-                <tr class="boxed-settings" <?php echo $display_mode === 'fullscreen' ? 'style="display:none;"' : ''; ?>>
-                    <th scope="row"><label for="smm_content_bg_opacity">Content Background Opacity</label></th>
-                    <td>
-                        <input type="range" name="smm_content_bg_opacity" id="smm_content_bg_opacity" value="<?php echo esc_attr($content_bg_opacity); ?>" min="0" max="100" step="1">
-                        <span id="content_bg_opacity_value"><?php echo esc_html($content_bg_opacity); ?>%</span>
-                    </td>
-                </tr>
-                <tr class="boxed-settings" <?php echo $display_mode === 'fullscreen' ? 'style="display:none;"' : ''; ?>>
-                    <th scope="row"><label for="smm_box_padding">Box Padding</label></th>
-                    <td>
-                        <input type="number" name="smm_box_padding" id="smm_box_padding" value="<?php echo esc_attr($box_padding); ?>" min="0" max="100"> px
-                    </td>
-                </tr>
-                <tr class="boxed-settings" <?php echo $display_mode === 'fullscreen' ? 'style="display:none;"' : ''; ?>>
-                    <th scope="row"><label for="smm_box_shadow_color">Box Shadow Color</label></th>
-                    <td>
-                        <input type="text" name="smm_box_shadow_color" id="smm_box_shadow_color" value="<?php echo esc_attr($box_shadow_color); ?>" class="color-picker">
-                    </td>
-                </tr>
-                <tr class="boxed-settings" <?php echo $display_mode === 'fullscreen' ? 'style="display:none;"' : ''; ?>>
-                    <th scope="row"><label for="smm_box_shadow_opacity">Box Shadow Opacity</label></th>
-                    <td>
-                        <input type="range" name="smm_box_shadow_opacity" id="smm_box_shadow_opacity" value="<?php echo esc_attr($box_shadow_opacity); ?>" min="0" max="100" step="1">
-                        <span id="box_shadow_opacity_value"><?php echo esc_html($box_shadow_opacity); ?>%</span>
-                    </td>
-                </tr>
-
-                <tr><th scope="row"><h3>Content Settings</h3></th></tr>
-
-                <tr>
-                    <th scope="row"><label>Logo Image</label></th>
-                    <td>
-                        <div class="image-preview-wrapper-logo">
-                            <img id="logo_image_preview" src="<?php echo esc_url($logo_image); ?>" style="max-width: 200px; display: <?php echo empty($logo_image) ? 'none' : 'block'; ?>">
-                        </div>
-                        <input type="hidden" name="smm_logo_image" id="smm_logo_image" value="<?php echo esc_attr($logo_image); ?>">
-                        <button type="button" class="button" id="upload_logo_image">Choose Logo</button>
-                        <button type="button" class="button" id="remove_logo_image" style="display: <?php echo empty($logo_image) ? 'none' : 'inline-block'; ?>">Remove Logo</button>
-                    </td>
-                </tr>
-
-                <tr>
-                    <th scope="row"><label for="smm_custom_content">Custom Content</label></th>
-                    <td>
-                        <?php
-                        wp_editor($custom_content, 'smm_custom_content', array(
-                            'textarea_name' => 'smm_custom_content',
-                            'media_buttons' => true,
-                            'textarea_rows' => 10,
-                            'editor_height' => 200
-                        ));
-                        ?>
-                        <p class="description">Customize the content that appears on your maintenance/coming soon page. The default content will only be used if this field is empty.</p>
-                    </td>
-                </tr>
-
-                <tr>
-                    <th scope="row"><label for="smm_show_countdown">Show Countdown</label></th>
-                    <td>
-                        <input type="checkbox" name="smm_show_countdown" id="smm_show_countdown" value="1" <?php checked($show_countdown, true); ?>>
-                    </td>
-                </tr>
-
-                <tr class="countdown-date-section" <?php echo !$show_countdown ? 'style="display:none;"' : ''; ?>>
-                    <th scope="row"><label for="smm_countdown_date">Launch Date</label></th>
-                    <td>
-                        <input type="datetime-local" name="smm_countdown_date" id="smm_countdown_date" value="<?php echo esc_attr($countdown_date); ?>">
-                    </td>
-                </tr>
-
-                <tr>
-                    <th scope="row"><label for="smm_text_color">Text Color</label></th>
-                    <td>
-                        <input type="text" 
-                               name="smm_text_color" 
-                               id="smm_text_color" 
-                               value="<?php echo esc_attr(get_option('smm_text_color', '#000000')); ?>" 
-                               class="color-picker">
-                        <p class="description">Choose the color for your text content.</p>
-                    </td>
-                </tr>                
-            </table>
-
-            <button type="button" class="button" id="preview_maintenance_mode">Preview Page</button>
-
-            <?php submit_button('Save Settings'); ?>
-        </form>
-    </div>
-
-    <script>
-    function selectPredefinedBackground(img) {
-        var url = img.getAttribute('data-url');
-        jQuery('#smm_background_image').val(url);
-        jQuery('.image-preview-wrapper-background img').attr('src', url).show();
-        jQuery('#remove_background_image').show();
-        
-        // Update visual selection
-        jQuery('.background-option img').css('border-color', 'transparent');
-        jQuery(img).css('border-color', '#007cba');
-    }
-
-    jQuery(document).ready(function($) {
-        $('#smm_display_mode').change(function() {
-            if ($(this).val() === 'boxed') {
-                $('.boxed-settings').show();
-            } else {
-                $('.boxed-settings').hide();
-            }
-        });
-
-        $('#smm_box_shadow_opacity').on('input change', function() {
-            $('#box_shadow_opacity_value').text($(this).val() + '%');
-        });
-        $('#smm_content_bg_opacity').on('input change', function() {
-            $('#content_bg_opacity_value').text($(this).val() + '%');
-        });
-
-        $('#preview_maintenance_mode').click(function() {
-            var previewUrl = '<?php echo esc_url(home_url('?preview_maintenance_mode=1')); ?>';
-            window.open(previewUrl, '_blank');
-        });
-
-    });
-    function copyToClipboard(text) {
-        if (navigator.clipboard) {
-            navigator.clipboard.writeText(text).then(function() {
-                alert("Copied to clipboard: " + text);
-            }).catch(function(error) {
-                alert("Copy failed! " + error);
-            });
-        } else {
-            // Fallback for unsupported browsers
-            var tempInput = document.createElement('textarea');
-            tempInput.value = text;
-            document.body.appendChild(tempInput);
-            tempInput.select();
-            try {
-                document.execCommand('copy');
-                alert("Copied to clipboard: " + text);
-            } catch (error) {
-                alert("Copy failed! " + error);
-            }
-            document.body.removeChild(tempInput);
-        }
-    }
-
-    // Add click event listener to the copy button
-    document.addEventListener('DOMContentLoaded', function() {
-        var copyButton = document.getElementById('copyBypassUrl');
-        if (copyButton) {
-            copyButton.addEventListener('click', function() {
-                var bypassUrl = document.getElementById('bypass_url').value;
-                copyToClipboard(bypassUrl);
-            });
-        }
-    });
-
-    </script>
-    <?php
-}
-
-// Add a button to the admin bar with dynamic text based on the current mode
-function add_simple_maintenance_mode_admin_bar_button( $wp_admin_bar ) {
-    $status = get_option('simple_maintenance_mode_status', 'online'); // Default to online
-
-    // Determine the button text based on the current status
-    switch ($status) {
-        case 'maintenance':
-            $button_text = 'Mode: Maintenance';
-            break;
-        case 'coming_soon':
-            $button_text = 'Mode: Coming Soon';
-            break;
-        default:
-            $button_text = 'Mode: Online';
-            break;
-    }
-
-    if ($status !== 'online') {
-        $args = array(
-            'id' => 'simple_maintenance_mode_settings',
-            'title' => $button_text,
-            'href' => admin_url('options-general.php?page=maintenance-mode-settings'),
-            'parent' => 'top-secondary', // The area on the right side of the admin bar
-            'meta' => array('class' => 'maintenance-mode-admin-bar')
-        );
-        $wp_admin_bar->add_node($args);
-    }
-}
-add_action('admin_bar_menu', 'add_simple_maintenance_mode_admin_bar_button', 100);
-
-function simple_maintenance_mode_admin_styles() {
-    echo '
-    <style type="text/css">
-        #wpadminbar .maintenance-mode-admin-bar {
-            float: right;
-        }
-    </style>';
-}
-add_action('admin_head', 'simple_maintenance_mode_admin_styles');
-
-// Make sure to hook early enough to intercept the template redirect
-add_action('template_redirect', 'simple_maintenance_mode_show_maintenance_page', 9); // priority 9 to override the default template redirect
-
-function simple_maintenance_mode_enqueue_admin_styles($hook) {
-    global $simple_maintenance_mode_version;
-    if ('settings_page_maintenance-mode-settings' !== $hook) {
-        return;
-    }
-    wp_enqueue_style(
-        'simple_maintenance_mode_admin_style',
-        plugin_dir_url(__FILE__) . 'css/admin-style.css',
-        array(),
-        $simple_maintenance_mode_version
-    );
-}
-add_action('admin_enqueue_scripts', 'simple_maintenance_mode_enqueue_admin_styles');
-
-function simple_maintenance_mode_enqueue_styles() {
-    global $simple_maintenance_mode_version;
-    // This assumes you are correctly determining when to load these styles.
-    wp_enqueue_style(
-        'simple_maintenance_mode_style', 
-        plugin_dir_url(__FILE__) . 'css/style.css', 
-        array(), 
-        $simple_maintenance_mode_version
-    );
-}
-add_action('wp_enqueue_scripts', 'simple_maintenance_mode_enqueue_styles');
-
-
-// Enqueue the script for the admin settings page
-function simple_maintenance_mode_enqueue_scripts($hook) {
-    global $simple_maintenance_mode_version;
-    // Only add to the settings page of the plugin
-    if ($hook !== 'settings_page_maintenance-mode-settings') {
-        return;
-    }
-
-    // Enqueue the JavaScript file
-    wp_enqueue_script(
-        'maintenance-mode-js', // Handle for the script
-        plugin_dir_url(__FILE__) . 'js/maintenance-mode.js', // Path to the script file
-        array(), // Dependencies (none in this case)
-        $simple_maintenance_mode_version, // Version number for the script
-        true // Place the script in the footer to avoid issues with DOMContentLoaded
-    );
-}
-add_action('admin_enqueue_scripts', 'simple_maintenance_mode_enqueue_scripts');
-
-// Generate a bypass token on activation 
-function simple_maintenance_mode_activate() {
-    // Check if the bypass token already exists
-    if (!get_option('simple_maintenance_mode_bypass_token')) {
-        // Generate and save a new token
-        simple_maintenance_mode_save_bypass_token();
-    }
-}
-register_activation_hook(__FILE__, 'simple_maintenance_mode_activate');
-
-// Add new settings fields
-function simple_maintenance_mode_register_settings() {
-    register_setting('simple_maintenance_mode_options', 'smm_background_type');
-    register_setting('simple_maintenance_mode_options', 'smm_background_image');
-    register_setting('simple_maintenance_mode_options', 'smm_background_video');
-    register_setting('simple_maintenance_mode_options', 'smm_background_alignment');
-    register_setting('simple_maintenance_mode_options', 'smm_background_size');
-    register_setting('simple_maintenance_mode_options', 'smm_background_color');
-    register_setting('simple_maintenance_mode_options', 'smm_overlay_color');
-    register_setting('simple_maintenance_mode_options', 'smm_custom_content');
-    register_setting('simple_maintenance_mode_options', 'smm_logo_image');
-    register_setting('simple_maintenance_mode_options', 'smm_show_countdown');
-    register_setting('simple_maintenance_mode_options', 'smm_countdown_date');
-}
-add_action('admin_init', 'simple_maintenance_mode_register_settings');
-
-// Enqueue necessary scripts and styles for the admin
-function simple_maintenance_mode_admin_enqueue($hook) {
-    if ('settings_page_maintenance-mode-settings' !== $hook) {
-        return;
-    }
-
-    // Enqueue WordPress media uploader
-    wp_enqueue_media();
-
-    // Enqueue WordPress scripts
-    wp_enqueue_script('wp-i18n');
-    wp_enqueue_script('wp-color-picker');
-    wp_enqueue_style('wp-color-picker');
-
-    // Enqueue color picker alpha
-    wp_enqueue_script(
-        'wp-color-picker-alpha',
-        plugin_dir_url(__FILE__) . 'js/wp-color-picker-alpha.min.js',
-        array('wp-color-picker', 'wp-i18n'),
-        '3.0.0',
-        true
-    );
-
-    // Enqueue admin script
-    wp_enqueue_script(
-        'simple-maintenance-mode-admin',
-        plugin_dir_url(__FILE__) . 'js/admin.js',
-        array('jquery', 'wp-color-picker', 'wp-color-picker-alpha', 'wp-i18n'),
-        '1.0.0',
-        true
-    );
-
-    // Localize the script with new data
-    wp_localize_script('simple-maintenance-mode-admin', 'smmAdmin', array(
-        'frame_title' => array(
-            'logo' => __('Select or Upload Logo Image', 'simple-maintenance-mode'),
-            'background' => __('Select or Upload Background Image', 'simple-maintenance-mode'),
-            'video' => __('Select or Upload Background Video', 'simple-maintenance-mode')
-        ),
-        'colorPicker' => array(
-            'pick' => __('Select Color', 'simple-maintenance-mode'),
-            'current' => __('Current Color', 'simple-maintenance-mode')
-        )
-    ));
-
-    // Set translation for color picker
-    wp_set_script_translations('simple-maintenance-mode-admin', 'simple-maintenance-mode');
-
-    // Enqueue editor if needed
-    wp_enqueue_editor();
-}
-add_action('admin_enqueue_scripts', 'simple_maintenance_mode_admin_enqueue');
-
-add_action('template_redirect', function() {
-    if (isset($_GET['preview_maintenance_mode']) && current_user_can('manage_options')) {
-
-        $background_type = get_option('smm_background_type', 'image');
-        $background_image = get_option('smm_background_image', '');
-        $background_video = get_option('smm_background_video', '');
-        $background_alignment = get_option('smm_background_alignment', 'center center');
-        $background_size = get_option('smm_background_size', 'cover');
-        $background_color = get_option('smm_background_color', '#ffffff');
-        $overlay_color = get_option('smm_overlay_color', 'rgba(0,0,0,0.5)');
-        $overlay_opacity = get_option('smm_overlay_opacity', 0);
-        $text_color = get_option('smm_text_color', '#000000');
-        $display_mode = get_option('smm_display_mode', 'fullscreen');
-        $content_bg_color = get_option('smm_content_bg_color', '#ffffff');
-        $content_bg_opacity = get_option('smm_content_bg_opacity', 0);
-        $box_padding = get_option('smm_box_padding', 0);
-        $box_shadow_color = get_option('smm_box_shadow_color', '#000000');
-        $box_shadow_opacity = get_option('smm_box_shadow_opacity', 0);
-        $custom_content = htmlspecialchars_decode(get_option('smm_custom_content', ''));
-        if ($custom_content !== '') { 
-            $custom_content = wp_unslash($custom_content); // remove slashes
-        }
-        if (empty($custom_content)) {
-            $custom_content = simple_maintenance_mode_get_default_content($status);
-        }
-        $logo_image = get_option('smm_logo_image', '');
-        $show_countdown = get_option('smm_show_countdown', false);
-        $countdown_date = get_option('smm_countdown_date', '');
-
-        // Get list of background images from assets folder
-        $backgrounds_dir = plugin_dir_path(__FILE__) . 'assets/backgrounds/';
-        $backgrounds_url = plugin_dir_url(__FILE__) . 'assets/backgrounds/';
-        $background_images = glob($backgrounds_dir . '*.{jpg,jpeg,png,gif}', GLOB_BRACE);
-        $background_images = array_map('basename', $background_images); 
-
-        
-        // Load the maintenance or coming soon template
-        include plugin_dir_path(__FILE__) . 'maintenance-fullscreen-template.php';
+        wp_safe_redirect( get_permalink( $page_id ), 302 );
         exit;
     }
-});
 
-?>
+    smm_send_headers();
+    extract( smm_get_template_settings(), EXTR_SKIP );
+    include SMM_DIR . 'maintenance-fullscreen-template.php';
+    exit;
+}
+add_action( 'template_redirect', 'smm_render_maintenance_page', 0 );
+
+function smm_block_rest_api( $result ) {
+    if ( $result || ! smm_is_active() || ! smm_get( 'block_rest_api' ) || smm_request_is_allowed() ) {
+        return $result;
+    }
+    return new WP_Error(
+        'smm_maintenance',
+        __( 'The site is temporarily unavailable.', 'simple-maintenance-mode' ),
+        array( 'status' => smm_effective_response_code() )
+    );
+}
+add_filter( 'rest_authentication_errors', 'smm_block_rest_api', 99 );
+
+function smm_filter_xmlrpc_enabled( $enabled ) {
+    if ( smm_is_active() && smm_get( 'block_xmlrpc' ) && ! current_user_can( 'manage_options' ) && ! smm_current_path_is_exempt() ) {
+        return false;
+    }
+    return $enabled;
+}
+add_filter( 'xmlrpc_enabled', 'smm_filter_xmlrpc_enabled' );
+
+function smm_sanitize_choice( $value, $allowed, $fallback ) {
+    $value = sanitize_text_field( wp_unslash( $value ) );
+    return in_array( $value, $allowed, true ) ? $value : $fallback;
+}
+
+function smm_clamp( $value, $min, $max ) {
+    return max( $min, min( $max, (int) $value ) );
+}
+
+function smm_save_settings() {
+    if ( ! current_user_can( 'manage_options' ) || empty( $_POST['smm_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['smm_nonce'] ) ), 'smm_save_settings' ) ) {
+        return;
+    }
+
+    update_option( 'simple_maintenance_mode_status', smm_sanitize_choice( $_POST['status'] ?? 'online', array( 'online', 'maintenance', 'coming_soon' ), 'online' ) );
+    update_option( 'simple_maintenance_mode_page', absint( $_POST['page_id'] ?? 0 ) );
+    update_option( 'smm_response_code', smm_sanitize_choice( $_POST['response_code'] ?? 'auto', array( 'auto', '200', '503' ), 'auto' ) );
+    update_option( 'smm_retry_after', smm_clamp( $_POST['retry_after'] ?? 3600, 60, 604800 ) );
+    update_option( 'smm_bypass_enabled', isset( $_POST['bypass_enabled'] ) ? 1 : 0 );
+    update_option( 'smm_bypass_duration', smm_clamp( $_POST['bypass_duration'] ?? 12, 1, 168 ) );
+    update_option( 'smm_custom_login_url', smm_normalize_exempt_path( sanitize_text_field( wp_unslash( $_POST['custom_login_url'] ?? '' ) ) ) );
+    update_option( 'smm_exempt_urls', smm_sanitize_exempt_urls( $_POST['exempt_urls'] ?? '' ) );
+
+    if ( isset( $_POST['regenerate_token'] ) ) {
+        smm_regenerate_bypass_token();
+    }
+
+    update_option( 'smm_layout', smm_sanitize_choice( $_POST['layout'] ?? 'centered-card', array( 'centered', 'centered-card', 'split-left', 'split-right', 'bottom-panel', 'minimal' ), 'centered-card' ) );
+    update_option( 'smm_background_type', smm_sanitize_choice( $_POST['background_type'] ?? 'gradient', array( 'solid', 'gradient', 'image', 'video' ), 'gradient' ) );
+    update_option( 'smm_gradient_preset', smm_sanitize_choice( $_POST['gradient_preset'] ?? 'ocean', array( 'ocean', 'sunset', 'aurora', 'midnight', 'purple', 'warm', 'sky', 'forest', 'slate', 'light', 'dark', 'custom' ), 'ocean' ) );
+    update_option( 'smm_gradient_color_1', sanitize_hex_color( $_POST['gradient_color_1'] ?? '#0f172a' ) ?: '#0f172a' );
+    update_option( 'smm_gradient_color_2', sanitize_hex_color( $_POST['gradient_color_2'] ?? '#2563eb' ) ?: '#2563eb' );
+    update_option( 'smm_gradient_angle', smm_clamp( $_POST['gradient_angle'] ?? 135, 0, 360 ) );
+    update_option( 'smm_background_color', sanitize_hex_color( $_POST['background_color'] ?? '#0f172a' ) ?: '#0f172a' );
+    update_option( 'smm_background_image', esc_url_raw( wp_unslash( $_POST['background_image'] ?? '' ) ) );
+    update_option( 'smm_background_video', esc_url_raw( wp_unslash( $_POST['background_video'] ?? '' ) ) );
+    update_option( 'smm_background_alignment', smm_sanitize_choice( $_POST['background_alignment'] ?? 'center center', array( 'center center', 'top left', 'top center', 'top right', 'center left', 'center right', 'bottom left', 'bottom center', 'bottom right' ), 'center center' ) );
+    update_option( 'smm_background_size', smm_sanitize_choice( $_POST['background_size'] ?? 'cover', array( 'cover', 'contain', 'auto' ), 'cover' ) );
+    update_option( 'smm_overlay_color', sanitize_hex_color( $_POST['overlay_color'] ?? '#000000' ) ?: '#000000' );
+    update_option( 'smm_overlay_opacity', smm_clamp( $_POST['overlay_opacity'] ?? 20, 0, 100 ) );
+
+    update_option( 'smm_logo_image', esc_url_raw( wp_unslash( $_POST['logo_image'] ?? '' ) ) );
+    update_option( 'smm_logo_width', smm_clamp( $_POST['logo_width'] ?? 180, 40, 600 ) );
+    update_option( 'smm_heading', sanitize_text_field( wp_unslash( $_POST['heading'] ?? '' ) ) );
+    update_option( 'smm_message', sanitize_textarea_field( wp_unslash( $_POST['message'] ?? '' ) ) );
+    update_option( 'smm_text_color', sanitize_hex_color( $_POST['text_color'] ?? '#ffffff' ) ?: '#ffffff' );
+    update_option( 'smm_heading_size', smm_clamp( $_POST['heading_size'] ?? 44, 20, 96 ) );
+    update_option( 'smm_body_size', smm_clamp( $_POST['body_size'] ?? 19, 12, 36 ) );
+    update_option( 'smm_font_family', smm_sanitize_choice( $_POST['font_family'] ?? 'system', array( 'system', 'arial', 'helvetica', 'georgia', 'times', 'verdana', 'trebuchet', 'monospace' ), 'system' ) );
+    update_option( 'smm_font_weight', smm_sanitize_choice( $_POST['font_weight'] ?? '700', array( '400', '500', '600', '700', '800' ), '700' ) );
+    update_option( 'smm_text_align', smm_sanitize_choice( $_POST['text_align'] ?? 'center', array( 'left', 'center', 'right' ), 'center' ) );
+    update_option( 'smm_content_width', smm_clamp( $_POST['content_width'] ?? 720, 320, 1200 ) );
+    update_option( 'smm_content_bg_color', sanitize_hex_color( $_POST['content_bg_color'] ?? '#0f172a' ) ?: '#0f172a' );
+    update_option( 'smm_content_bg_opacity', smm_clamp( $_POST['content_bg_opacity'] ?? 55, 0, 100 ) );
+    update_option( 'smm_box_padding', smm_clamp( $_POST['box_padding'] ?? 48, 0, 100 ) );
+    update_option( 'smm_border_radius', smm_clamp( $_POST['border_radius'] ?? 20, 0, 60 ) );
+    update_option( 'smm_box_shadow_opacity', smm_clamp( $_POST['box_shadow_opacity'] ?? 25, 0, 100 ) );
+
+    update_option( 'smm_show_countdown', isset( $_POST['show_countdown'] ) ? 1 : 0 );
+    update_option( 'smm_countdown_date', sanitize_text_field( wp_unslash( $_POST['countdown_date'] ?? '' ) ) );
+    update_option( 'smm_show_button', isset( $_POST['show_button'] ) ? 1 : 0 );
+    update_option( 'smm_button_label', sanitize_text_field( wp_unslash( $_POST['button_label'] ?? '' ) ) );
+    update_option( 'smm_button_url', esc_url_raw( wp_unslash( $_POST['button_url'] ?? '' ) ) );
+    update_option( 'smm_button_new_tab', isset( $_POST['button_new_tab'] ) ? 1 : 0 );
+    update_option( 'smm_button_bg_color', sanitize_hex_color( $_POST['button_bg_color'] ?? '#ffffff' ) ?: '#ffffff' );
+    update_option( 'smm_button_text_color', sanitize_hex_color( $_POST['button_text_color'] ?? '#0f172a' ) ?: '#0f172a' );
+    update_option( 'smm_custom_content', wp_kses_post( wp_unslash( $_POST['custom_content'] ?? '' ) ) );
+    update_option( 'smm_block_rest_api', isset( $_POST['block_rest_api'] ) ? 1 : 0 );
+    update_option( 'smm_block_xmlrpc', isset( $_POST['block_xmlrpc'] ) ? 1 : 0 );
+
+    set_transient( 'smm_settings_saved', 1, 30 );
+}
+
+function smm_admin_menu() {
+    add_menu_page(
+        __( 'Maintenance Mode', 'simple-maintenance-mode' ),
+        __( 'Maintenance', 'simple-maintenance-mode' ),
+        'manage_options',
+        'simple-maintenance-mode',
+        'smm_settings_page',
+        'dashicons-hammer',
+        81
+    );
+}
+add_action( 'admin_menu', 'smm_admin_menu' );
+
+function smm_plugin_action_links( $links ) {
+    array_unshift( $links, '<a href="' . esc_url( admin_url( 'admin.php?page=simple-maintenance-mode' ) ) . '">' . esc_html__( 'Settings', 'simple-maintenance-mode' ) . '</a>' );
+    return $links;
+}
+add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), 'smm_plugin_action_links' );
+
+function smm_admin_notice() {
+    if ( get_transient( 'smm_settings_saved' ) ) {
+        delete_transient( 'smm_settings_saved' );
+        echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Maintenance Mode settings saved.', 'simple-maintenance-mode' ) . '</p></div>';
+    }
+    if ( smm_is_active() && current_user_can( 'manage_options' ) ) {
+        $label = 'maintenance' === smm_get( 'status' ) ? __( 'Maintenance Mode is ON', 'simple-maintenance-mode' ) : __( 'Coming Soon mode is ON', 'simple-maintenance-mode' );
+        echo '<div class="notice notice-warning"><p><strong>' . esc_html( $label ) . '.</strong> ' . esc_html__( 'Visitors cannot access the normal website.', 'simple-maintenance-mode' ) . ' <a href="' . esc_url( admin_url( 'admin.php?page=simple-maintenance-mode' ) ) . '">' . esc_html__( 'Settings', 'simple-maintenance-mode' ) . '</a></p></div>';
+    }
+}
+add_action( 'admin_notices', 'smm_admin_notice' );
+
+function smm_admin_bar( $bar ) {
+    if ( ! current_user_can( 'manage_options' ) || ! smm_is_active() ) {
+        return;
+    }
+    $title = 'maintenance' === smm_get( 'status' ) ? '● ' . __( 'Maintenance ON', 'simple-maintenance-mode' ) : '● ' . __( 'Coming Soon ON', 'simple-maintenance-mode' );
+    $bar->add_node(
+        array(
+            'id'    => 'smm-status',
+            'title' => $title,
+            'href'  => admin_url( 'admin.php?page=simple-maintenance-mode' ),
+            'meta'  => array( 'class' => 'smm-admin-bar-status' ),
+        )
+    );
+}
+add_action( 'admin_bar_menu', 'smm_admin_bar', 90 );
+
+function smm_admin_assets( $hook ) {
+    if ( 'toplevel_page_simple-maintenance-mode' !== $hook ) {
+        return;
+    }
+    wp_enqueue_media();
+    wp_enqueue_style( 'wp-color-picker' );
+    wp_enqueue_style( 'smm-admin', SMM_URL . 'css/admin-style.css', array(), SMM_VERSION );
+    wp_enqueue_script( 'smm-admin', SMM_URL . 'js/admin.js', array( 'jquery', 'wp-color-picker' ), SMM_VERSION, true );
+    wp_localize_script(
+        'smm-admin',
+        'smmAdmin',
+        array(
+            'logoTitle'       => __( 'Choose Logo', 'simple-maintenance-mode' ),
+            'backgroundTitle' => __( 'Choose Background Image', 'simple-maintenance-mode' ),
+            'videoTitle'      => __( 'Choose Background Video', 'simple-maintenance-mode' ),
+        )
+    );
+}
+add_action( 'admin_enqueue_scripts', 'smm_admin_assets' );
+
+function smm_settings_page() {
+    include SMM_DIR . 'includes/admin-page.php';
+}
+
+function smm_preview_page() {
+    if ( empty( $_GET['smm_preview'] ) || ! current_user_can( 'manage_options' ) ) {
+        return;
+    }
+    $nonce = sanitize_text_field( wp_unslash( $_GET['smm_preview'] ) );
+    if ( ! wp_verify_nonce( $nonce, 'smm_preview' ) ) {
+        return;
+    }
+    extract( smm_get_template_settings(), EXTR_SKIP );
+    include SMM_DIR . 'maintenance-fullscreen-template.php';
+    exit;
+}
+add_action( 'template_redirect', 'smm_preview_page', -1 );
+
+function smm_activate() {
+    smm_get_bypass_token();
+}
+register_activation_hook( __FILE__, 'smm_activate' );
