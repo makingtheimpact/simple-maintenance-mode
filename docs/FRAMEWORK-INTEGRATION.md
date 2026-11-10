@@ -49,4 +49,4 @@ The package **must** include CSS/JS/template assets (declared in `release_paths`
 6. Verify native WordPress update notification and details against a **test** update response.
 7. Verify settings unchanged before/after, deactivate/reactivate, and recovery/rollback.
 
-**No actual WordPress staging upgrade is claimed by this branch.**
+**Automated coverage:** GitHub Actions now installs a real disposable WordPress site (PHP 8.2 + MariaDB), activates the original v2 plugin, writes representative legacy options, overlays this integration, and checks persistence, update-hook registration, and mode response codes. The automated upgrade passed. This is *not* full browser QA, live update delivery, or testing against the owner's production/staging sites.
