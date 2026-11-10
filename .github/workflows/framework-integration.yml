@@ -1,0 +1,42 @@
+name: Simple Maintenance Mode framework integration
+
+on:
+  push:
+    branches:
+      - feature/framework-integration-v2-20261110
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  plugin:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.4', '8.2', '8.3', '8.4']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: zip
+          coverage: none
+      - name: Check runtime PHP syntax
+        run: |
+          find . -type f -name '*.php' -not -path './tools/*' -not -path './tests/*' -print0 | xargs -0 -n1 php -l
+      - name: Check integration without WordPress
+        run: php tests/framework-smoke.php
+      - name: Validate manifest and package (PHP 8.2+ build tools)
+        if: matrix.php != '7.4'
+        run: |
+          php tools/validate-manifest.php mti-plugin.json
+          mkdir -p /tmp/smm-build/simple-maintenance-mode
+          cp -a . /tmp/smm-build/simple-maintenance-mode/
+          php tools/build-release.php /tmp/smm-build/simple-maintenance-mode /tmp/simple-maintenance-mode-qa.zip
+          unzip -t /tmp/simple-maintenance-mode-qa.zip
+          unzip -Z1 /tmp/simple-maintenance-mode-qa.zip | grep -Fx 'simple-maintenance-mode/css/admin-style.css'
+          unzip -Z1 /tmp/simple-maintenance-mode-qa.zip | grep -Fx 'simple-maintenance-mode/js/admin.js'
+          unzip -Z1 /tmp/simple-maintenance-mode-qa.zip | grep -Fx 'simple-maintenance-mode/maintenance-fullscreen-template.php'
+          ! unzip -Z1 /tmp/simple-maintenance-mode-qa.zip | grep -E '(tests/|tools/|\.git/|\.github/)'

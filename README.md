@@ -78,3 +78,6 @@ Version 2.0 is a major refactor focused on security, compatibility, smaller dist
 ## License
 
 GPL-2.0-or-later.
+## MTI Framework Integration (in development)
+
+The `feature/framework-integration-v2-20261110` branch adds an isolated native WordPress updater and framework build pipeline to the owner-provided v2.0.0 source. **This branch is not approved for customer installation**: the MTI update endpoint is not yet live. See [integration guide](docs/FRAMEWORK-INTEGRATION.md). Existing settings keys and site behavior remain unchanged by design.

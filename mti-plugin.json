@@ -1,0 +1,20 @@
+{
+  "name": "Simple Maintenance Mode",
+  "slug": "simple-maintenance-mode",
+  "version": "2.0.0",
+  "namespace": "MTI\\Plugins\\SimpleMaintenanceMode",
+  "license": "GPL-2.0-or-later",
+  "requires_wordpress": "6.4",
+  "requires_php": "7.4",
+  "update_uri": "https://plugins.makingtheimpact.com/simple-maintenance-mode/",
+  "update_endpoint": "https://plugins.makingtheimpact.com/api/v1/plugins/simple-maintenance-mode/update",
+  "package_hosts": [
+    "github.com"
+  ],
+  "release_paths": [
+    "css",
+    "js",
+    "maintenance-fullscreen-template.php",
+    "index.php"
+  ]
+}

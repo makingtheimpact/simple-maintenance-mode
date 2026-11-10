@@ -10,6 +10,7 @@
  * Author URI:          https://makingtheimpact.com
  * License:             GPL-2.0-or-later
  * License URI:         https://www.gnu.org/licenses/gpl-2.0.html
+ * Update URI:         https://plugins.makingtheimpact.com/simple-maintenance-mode/
  * Text Domain:         simple-maintenance-mode
  * Domain Path:         /languages
  */
@@ -22,6 +23,9 @@ define( 'SMM_VERSION', '2.0.0' );
 define( 'SMM_FILE', __FILE__ );
 define( 'SMM_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SMM_URL', plugin_dir_url( __FILE__ ) );
+
+// Update integration is isolated from existing settings, bypass logic and UI.
+require_once SMM_DIR . 'includes/framework-bootstrap.php';
 
 function smm_defaults() {
     return array(
