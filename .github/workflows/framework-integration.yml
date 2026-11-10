@@ -40,3 +40,53 @@ jobs:
           unzip -Z1 /tmp/simple-maintenance-mode-qa.zip | grep -Fx 'simple-maintenance-mode/js/admin.js'
           unzip -Z1 /tmp/simple-maintenance-mode-qa.zip | grep -Fx 'simple-maintenance-mode/maintenance-fullscreen-template.php'
           ! unzip -Z1 /tmp/simple-maintenance-mode-qa.zip | grep -E '(tests/|tools/|\.git/|\.github/)'
+
+  wordpress:
+    name: WordPress upgrade smoke (PHP 8.2)
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root-test-password
+          MARIADB_DATABASE: wordpress
+          MARIADB_USER: wpci
+          MARIADB_PASSWORD: wpci-pass
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mysqli, zip
+          coverage: none
+      - name: Install WP CLI and WordPress
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -o /tmp/wp-cli.phar
+          php /tmp/wp-cli.phar --info
+          php /tmp/wp-cli.phar core download --path=/tmp/wp-ci --locale=en_US
+          php /tmp/wp-cli.phar core config --path=/tmp/wp-ci --dbname=wordpress --dbuser=wpci --dbpass=wpci-pass --dbhost=127.0.0.1:3306 --skip-check
+          php /tmp/wp-cli.phar core install --path=/tmp/wp-ci --url=http://localhost --title='SMM CI' --admin_user=admin --admin_password='ci-test-password' --admin_email=ci@example.test --skip-email
+      - name: Install original v2 and capture saved options
+        run: |
+          mkdir -p /tmp/wp-ci/wp-content/plugins/simple-maintenance-mode
+          git archive 7fc6757c7b5d813cc74cac92ff1491b9b013881e | tar -x -C /tmp/wp-ci/wp-content/plugins/simple-maintenance-mode
+          php /tmp/wp-cli.phar plugin activate simple-maintenance-mode --path=/tmp/wp-ci
+          php /tmp/wp-cli.phar option update simple_maintenance_mode_status maintenance --path=/tmp/wp-ci
+          php /tmp/wp-cli.phar option update simple_maintenance_mode_page 42 --path=/tmp/wp-ci
+          php /tmp/wp-cli.phar option update simple_maintenance_mode_bypass_token 'ci-token-keep-unchanged' --path=/tmp/wp-ci
+          php /tmp/wp-cli.phar option update smm_layout split-left --path=/tmp/wp-ci
+          php /tmp/wp-cli.phar option update smm_bypass_duration 24 --path=/tmp/wp-ci
+      - name: Upgrade in place and verify legacy configuration
+        run: |
+          cp -a ./. /tmp/wp-ci/wp-content/plugins/simple-maintenance-mode/
+          php /tmp/wp-cli.phar eval-file tests/wordpress-smoke.php --path=/tmp/wp-ci
+          php /tmp/wp-cli.phar plugin list --path=/tmp/wp-ci --fields=name,status,version
