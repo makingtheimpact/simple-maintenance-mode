@@ -13,6 +13,14 @@ postUpgradeCheck(is_file($path), 'main plugin file retained');
 require_once ABSPATH.'wp-admin/includes/plugin.php';
 $plugin = get_plugin_data($path);
 postUpgradeCheck($plugin['Version'] === '2.0.1', 'actual installed version is 2.0.1');
+if (!defined('SMM_VERSION')) {
+    $active = is_plugin_active('simple-maintenance-mode/simple-maintenance-mode.php');
+    $plugins = get_option('active_plugins', []);
+    throw new RuntimeException('Upgraded code was not loaded in new WordPress request. '
+        .'is_plugin_active='.($active ? 'yes' : 'no')
+        .' active_plugins='.json_encode($plugins)
+        .' main_file_exists='.(is_file($path) ? 'yes' : 'no'));
+}
 postUpgradeCheck(SMM_VERSION === '2.0.1', 'new code loaded in a separate WordPress request');
 postUpgradeCheck(is_plugin_active('simple-maintenance-mode/simple-maintenance-mode.php'),
     'plugin stays active');
