@@ -5,12 +5,17 @@
   "namespace": "MTI\\Plugins\\SimpleMaintenanceMode",
   "license": "GPL-2.0-or-later",
   "requires_wordpress": "6.4",
-  "requires_php": "7.4",
-  "update_uri": "https://plugins.makingtheimpact.com/simple-maintenance-mode/",
-  "update_endpoint": "https://plugins.makingtheimpact.com/api/v1/plugins/simple-maintenance-mode/update",
-  "package_hosts": [
-    "github.com"
+  "requires_php": "8.1",
+  "update_uri": "https://api.nightmarketplugins.com/plugins/simple-maintenance-mode/",
+  "update_endpoints": [
+    "https://api.nightmarketplugins.com/api/v1/plugins/simple-maintenance-mode/update",
+    "https://updates.thepluginmarket.com/api/v1/plugins/simple-maintenance-mode/update"
   ],
+  "package_hosts": [
+    "github.com",
+    "downloads.thepluginmarket.com"
+  ],
+  "public_keys": {},
   "release_paths": [
     "css",
     "js",
