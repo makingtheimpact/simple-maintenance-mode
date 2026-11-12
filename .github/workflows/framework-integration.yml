@@ -15,21 +15,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        php: ['7.4', '8.2', '8.3', '8.4']
+        php: ['8.1', '8.2', '8.3', '8.4', '8.5']
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: zip
+          extensions: zip, sodium
           coverage: none
       - name: Check runtime PHP syntax
         run: |
           find . -type f -name '*.php' -not -path './tools/*' -not -path './tests/*' -print0 | xargs -0 -n1 php -l
       - name: Check integration without WordPress
         run: php tests/framework-smoke.php
-      - name: Validate manifest and package (PHP 8.2+ build tools)
-        if: matrix.php != '7.4'
+      - name: Validate manifest and package (PHP 8.1–8.5)
         run: |
           php tools/validate-manifest.php mti-plugin.json
           mkdir -p /tmp/smm-build/simple-maintenance-mode
@@ -42,7 +41,19 @@ jobs:
           ! unzip -Z1 /tmp/simple-maintenance-mode-qa.zip | grep -E '(tests/|tools/|\.git/|\.github/)'
 
   wordpress:
-    name: WordPress upgrade smoke (PHP 8.2)
+    name: WordPress ${{ matrix.wordpress }} PHP ${{ matrix.php }} upgrade smoke
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - php: '8.1'
+            wordpress: '6.9'
+          - php: '8.5'
+            wordpress: '6.9'
+          - php: '8.1'
+            wordpress: '7.1.4'
+          - php: '8.5'
+            wordpress: '7.1.4'
     runs-on: ubuntu-latest
     services:
       mysql:
@@ -65,14 +76,14 @@ jobs:
           fetch-depth: 0
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.2'
-          extensions: mysqli, zip
+          php-version: ${{ matrix.php }}
+          extensions: mysqli, zip, sodium
           coverage: none
       - name: Install WP CLI and WordPress
         run: |
           curl -fsSL https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -o /tmp/wp-cli.phar
           php /tmp/wp-cli.phar --info
-          php /tmp/wp-cli.phar core download --path=/tmp/wp-ci --locale=en_US
+          php /tmp/wp-cli.phar core download --path=/tmp/wp-ci --version=${{ matrix.wordpress }} --locale=en_US
           php /tmp/wp-cli.phar core config --path=/tmp/wp-ci --dbname=wordpress --dbuser=wpci --dbpass=wpci-pass --dbhost=127.0.0.1:3306 --skip-check
           php /tmp/wp-cli.phar core install --path=/tmp/wp-ci --url=http://localhost --title='SMM CI' --admin_user=admin --admin_password='ci-test-password' --admin_email=ci@example.test --skip-email
       - name: Install original v2 and capture saved options
