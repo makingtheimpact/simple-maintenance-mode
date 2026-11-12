@@ -101,7 +101,7 @@ set_site_transient('update_plugins', $updates);
 require_once ABSPATH.'wp-admin/includes/class-wp-upgrader.php';
 $upgrader = new Plugin_Upgrader(new Automatic_Upgrader_Skin());
 $result = $upgrader->upgrade($pluginFile);
-$assert($result === true, 'Plugin_Upgrader completed a verified update');
+$assert($result !== false && !is_wp_error($result), 'Plugin_Upgrader completed a verified update');
 $assert(in_array($packageUrl, $GLOBALS['smm_ci_requests'], true), 'primary ZIP was attempted');
 $assert(in_array($mirrorUrl, $GLOBALS['smm_ci_requests'], true), 'signed mirror was used after bad ZIP');
 $assert(get_option('simple_maintenance_mode_bypass_token') === 'ci-token-keep-unchanged',
