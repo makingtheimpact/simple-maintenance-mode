@@ -52,9 +52,15 @@ unzip -Z1 /tmp/simple-maintenance-mode-preview.zip | grep -E 'css/admin-style.cs
 
 The ZIP builder enforces manifest/header/readme version alignment, refuses symlinks and hidden/secret-like assets, and does not package `tests/` or `tools/`. Preview ZIPs with no pinned key are **not** approved releases.
 
+### Verified integration results
+
+The [WordPress upgrade CI](https://github.com/makingtheimpact/simple-maintenance-mode/actions) now passes in disposable WordPress 6.9 and 7.1.4 installs on **PHP 8.1 and 8.5**. Its signed test exercises native `Plugin_Upgrader` under **automatic-update/cron semantics** so active status is preserved, even after a tampered primary package is rejected and the signed mirror is installed. A subsequent WordPress request verifies actual 2.0.1 test code loads, the plugin stays active, original maintenance mode and all representative settings remain intact, and the signed updater remains registered.
+
+A direct non-cron `Plugin_Upgrader::upgrade()` call intentionally deactivates active plugins; normal WordPress admin flows handle reactivation outside that low-level method. The automated update CI therefore tests the correct cron mode instead of treating the direct-upgrader deactivation as a plugin failure.
+
 ### Remaining release gates
 
-1. Verify WordPress native update leaves the plugin functional and configured as expected after a separate request; test activation status explicitly.
+1. Manually test WordPress administrative update flows (including reactivation), UI preview, installation and rollback.
 2. Test online, coming-soon (HTTP 200), maintenance (HTTP 503 + Retry-After), exempt pages, login route and bypass tokens/cookies in an interactive browser, on desktop and mobile.
 3. Validate admin settings, media picker, layout preview, countdown, REST/XML-RPC controls, caching and third-party plugin interactions.
 4. Independently test rollback and multisite behavior, or document multisite as unsupported.
