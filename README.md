@@ -78,3 +78,11 @@ Version 2.0 is a major refactor focused on security, compatibility, smaller dist
 ## License
 
 GPL-2.0-or-later.
+
+## MTI Framework Integration (draft)
+
+The [framework integration PR](https://github.com/makingtheimpact/simple-maintenance-mode/pull/2) vendors the independent MTI plugin framework with **Ed25519-signed WordPress updates**, primary/backup metadata endpoints, and SHA-256 ZIP verification. It preserves existing settings and bypass tokens. This remains an **unreleased draft**, with no trusted production signing key included and no update requests made by the draft plugin.
+
+The framework-integrated version requires **PHP 8.1+** (tested on 8.1–8.5). The original plugin's WordPress 6.4 minimum remains unchanged. PHP 8.5 requires a suitably compatible WordPress version, tested here on 6.9 and 7.1.4. PHP 8.1 itself is end-of-life.
+
+Automated GitHub Actions checks have passed for all five PHP versions and for **native signed upgrades** on WordPress 6.9/7.1.4 with PHP 8.1/8.5, including broken-primary API failover, tampered ZIP rejection, signed mirror recovery, preserved active status, settings, bypass token and assets. CI builds a **temporary synthetic 2.0.1 release** with an ephemeral signing key; no 2.0.1 artifact is published. See [integration documentation](docs/FRAMEWORK-INTEGRATION.md).
