@@ -99,8 +99,14 @@ $updates->translations = [];
 set_site_transient('update_plugins', $updates);
 
 require_once ABSPATH.'wp-admin/includes/class-wp-upgrader.php';
+// This tests the automatic/background update path. WordPress deliberately
+// deactivates plugins during a direct non-cron upgrader call; the wp-admin
+// controller normally handles the subsequent reactivation. On cron, WordPress
+// instead preserves the active plugin and toggles maintenance mode.
+add_filter('wp_doing_cron', '__return_true', 1000);
 $upgrader = new Plugin_Upgrader(new Automatic_Upgrader_Skin());
 $result = $upgrader->upgrade($pluginFile);
+remove_filter('wp_doing_cron', '__return_true', 1000);
 $assert($result !== false && !is_wp_error($result), 'Plugin_Upgrader completed a verified update');
 $assert(in_array($packageUrl, $GLOBALS['smm_ci_requests'], true), 'primary ZIP was attempted');
 $assert(in_array($mirrorUrl, $GLOBALS['smm_ci_requests'], true), 'signed mirror was used after bad ZIP');
