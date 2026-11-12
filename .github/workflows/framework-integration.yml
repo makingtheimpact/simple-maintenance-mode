@@ -101,3 +101,13 @@ jobs:
           cp -a ./. /tmp/wp-ci/wp-content/plugins/simple-maintenance-mode/
           php /tmp/wp-cli.phar eval-file tests/wordpress-smoke.php --path=/tmp/wp-ci
           php /tmp/wp-cli.phar plugin list --path=/tmp/wp-ci --fields=name,status,version
+      - name: Generate ephemeral signed ZIP release (never published)
+        run: |
+          mkdir -p /tmp/smm-fixture/simple-maintenance-mode
+          cp -a ./. /tmp/smm-fixture/simple-maintenance-mode/
+          php tests/prepare-signed-fixture.php
+      - name: Exercise native WordPress signed update with API and ZIP failover
+        run: |
+          php /tmp/wp-cli.phar eval-file tests/signed-wordpress-upgrade.php --path=/tmp/wp-ci
+          php /tmp/wp-cli.phar eval-file tests/wordpress-post-update.php --path=/tmp/wp-ci
+
