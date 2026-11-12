@@ -10,6 +10,7 @@ function postUpgradeCheck(bool $value, string $reason): void
 }
 $path = WP_PLUGIN_DIR.'/simple-maintenance-mode/simple-maintenance-mode.php';
 postUpgradeCheck(is_file($path), 'main plugin file retained');
+require_once ABSPATH.'wp-admin/includes/plugin.php';
 $plugin = get_plugin_data($path);
 postUpgradeCheck($plugin['Version'] === '2.0.1', 'actual installed version is 2.0.1');
 postUpgradeCheck(SMM_VERSION === '2.0.1', 'new code loaded in a separate WordPress request');
